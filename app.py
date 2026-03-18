@@ -15,11 +15,30 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from data.products_db import (
-    get_dataframe, get_top10_by_category, get_categories,
-    generate_price_history, generate_rotation_history, PRODUCTS
-)
+# Asegura que el directorio raíz del proyecto esté en el path
+ROOT = os.path.dirname(os.path.abspath(__file__))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+try:
+    from data.products_db import (
+        get_dataframe, get_top10_by_category, get_categories,
+        generate_price_history, generate_rotation_history, PRODUCTS
+    )
+except ModuleNotFoundError:
+    # Fallback: import directo del archivo
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "products_db", os.path.join(ROOT, "data", "products_db.py")
+    )
+    products_db = importlib.util.load_from_spec(spec)
+    spec.loader.exec_module(products_db)
+    get_dataframe = products_db.get_dataframe
+    get_top10_by_category = products_db.get_top10_by_category
+    get_categories = products_db.get_categories
+    generate_price_history = products_db.generate_price_history
+    generate_rotation_history = products_db.generate_rotation_history
+    PRODUCTS = products_db.PRODUCTS
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE PÁGINA
