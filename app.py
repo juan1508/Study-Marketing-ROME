@@ -297,12 +297,7 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-# ── Filtrar ───────────────────────────────────────────────────────
-df=DF.copy()
-if cat_s!="Todas": df=df[df["cat"]==cat_s]
-if tgt_s!="Todos": df=df[df["target"]==tgt_s]
-df=df[(df["precio"]>=pr[0])&(df["precio"]<=pr[1])&df["tend"].isin(ts)&df["rot"].isin(rs)&(df["rating"]>=rm)]
-dfs=df.sort_values(sb,ascending=False)
+
 
 # ── KPIs ──────────────────────────────────────────────────────────
 st.markdown(f'<h3 style="color:{ACC};font-family:Syne,sans-serif;font-size:.95rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Indicadores Clave del Mercado</h3>',unsafe_allow_html=True)
@@ -316,6 +311,30 @@ with k6: st.metric("Margen Prom.",f"{df['margen'].mean():.1f}%",   delta="vs mer
 st.markdown("<br>",unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────
+# Quick filter bar (visible even without sidebar)
+with st.expander("🎛️ Filtros rápidos", expanded=False):
+    qc1, qc2, qc3, qc4 = st.columns(4)
+    with qc1:
+        cat_s2 = st.selectbox("Categoría", ["Todas"]+sorted(DF["cat"].dropna().unique().tolist()), key="qcat")
+        if cat_s2 != "Todas": cat_s = cat_s2
+    with qc2:
+        tgt_s2 = st.selectbox("Target", ["Todos","Femenino","Masculino","Mixto"], key="qtgt")
+        if tgt_s2 != "Todos": tgt_s = tgt_s2
+    with qc3:
+        pr2 = st.slider("Precio USD", 0, 250, (0,250), key="qpr")
+        pr = pr2
+    with qc4:
+        sb2 = st.radio("Ordenar", ["unidades","vol_usd","score","rating"], key="qsb",
+            format_func=lambda x:{"unidades":"Unidades","vol_usd":"Volumen USD","score":"Score","rating":"Rating"}[x])
+        sb = sb2
+
+# Re-apply filters with any quick-filter overrides
+df=DF.copy()
+if cat_s!="Todas": df=df[df["cat"]==cat_s]
+if tgt_s!="Todos": df=df[df["target"]==tgt_s]
+df=df[(df["precio"]>=pr[0])&(df["precio"]<=pr[1])&df["tend"].isin(ts)&df["rot"].isin(rs)&(df["rating"]>=rm)]
+dfs=df.sort_values(sb,ascending=False)
+
 t1,t2,t3,t4,t5=st.tabs(["Top 10","Tendencias","Precios y Rotacion","Explorador","Comparativo"])
 
 # ═══ TAB 1 ════════════════════════════════════════════════════════
@@ -335,11 +354,9 @@ with t1:
             textposition="outside",
             textfont=dict(color=WHITE),
         ))
-        sort_label = {"unidades":"Unidades / mes","vol_usd":"Volumen USD","score":"Score de Oportunidad","rating":"Rating promedio"}.get(sb, sb)
         fig.update_layout(**TH(height=400,showlegend=False,
             margin=dict(l=10,r=100,t=20,b=10),
             yaxis_categoryorder="total ascending"))
-        fig.update_layout(xaxis_title=sort_label)
         st.plotly_chart(fig,use_container_width=True)
 
         for i,row in top.iterrows():
