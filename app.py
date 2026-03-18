@@ -48,6 +48,9 @@ div[data-testid="metric-container"] label{color:#A8D8F0!important;font-size:.82r
 .streamlit-expanderHeader{background:#1A3A5C80!important;border:1px solid #1E5FAD30!important;border-radius:10px!important;color:#DDE8F5!important;}
 hr{border-color:#1E5FAD30!important;}
 #MainMenu,footer,header{visibility:hidden;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
+section[data-testid="stSidebar"]{min-width:260px!important;}
+[data-testid="stSidebarNavItems"]{display:block!important;}
 .card{background:linear-gradient(135deg,#1A3A5C,#0D2137);border:1px solid #54A0FF40;border-radius:12px;padding:16px;margin-bottom:12px;}
 .ba{background:#00B89425;color:#00B894;border:1px solid #00B89450;border-radius:20px;padding:2px 10px;font-size:.75rem;font-weight:600;}
 .bm{background:#FDCB6E25;color:#FDCB6E;border:1px solid #FDCB6E50;border-radius:20px;padding:2px 10px;font-size:.75rem;font-weight:600;}
@@ -304,19 +307,21 @@ with t1:
         st.warning("Sin productos con los filtros actuales.")
     else:
         names=top["nombre"].apply(lambda x:x[:45]+"..." if len(x)>45 else x)
+        # Build gradient colors based on rank (top = bright, bottom = dark)
+        n_bars = len(top)
+        bar_colors = [ACC if i==0 else BRT if i==1 else PRI if i<4 else MID for i in range(n_bars)]
         fig=go.Figure(go.Bar(
             y=names, x=top[sb], orientation="h",
-            marker_color=top[sb].tolist(),
-            marker_colorscale=[[0,MID],[0.5,PRI],[1,ACC]],
-            marker_showscale=False,
+            marker_color=bar_colors,
             text=top[sb].apply(lambda x:fmt(x) if sb=="vol_usd" else f"{x:,.0f}"),
             textposition="outside",
-            textfont_color=WHITE,
+            textfont=dict(color=WHITE),
         ))
+        sort_label = {"unidades":"Unidades / mes","vol_usd":"Volumen USD","score":"Score de Oportunidad","rating":"Rating promedio"}.get(sb, sb)
         fig.update_layout(**TH(height=400,showlegend=False,
             margin=dict(l=10,r=100,t=20,b=10),
-            yaxis_categoryorder="total ascending",
-            xaxis_title=sb.replace("_"," ").title()))
+            yaxis_categoryorder="total ascending"))
+        fig.update_layout(xaxis_title=sort_label)
         st.plotly_chart(fig,use_container_width=True)
 
         for i,row in top.iterrows():
@@ -360,14 +365,14 @@ with t2:
         tc["label"]=tc["tend"].map({"muy_creciente":"Muy Creciente","creciente":"Creciente","estable":"Estable","decreciente":"Decreciente"})
         fig=go.Figure(go.Pie(labels=tc["label"],values=tc["n"],hole=0.6,
             marker_colors=[ACC,BRT,PRI,RED],
-            textinfo="label+percent",textfont_color=WHITE))
+            textinfo="label+percent",textfont=dict(color=WHITE)))
         fig.update_layout(**TH(title_text="Distribucion por Tendencia",height=300,showlegend=False))
         st.plotly_chart(fig,use_container_width=True)
     with c2:
         vc=DF.groupby("cat")["vol_usd"].sum().sort_values()
         fig=go.Figure(go.Bar(y=vc.index,x=vc.values,orientation="h",
-            marker_color=list(vc.values),marker_colorscale=[[0,MID],[1,ACC]],marker_showscale=False,
-            text=[fmt(v) for v in vc.values],textposition="outside",textfont_color=WHITE))
+            marker_color=ACC,
+            text=[fmt(v) for v in vc.values],textposition="outside",textfont=dict(color=WHITE)))
         fig.update_layout(**TH(title_text="Volumen Mensual por Categoria",height=300,showlegend=False,margin=dict(l=10,r=90,t=50,b=10)))
         st.plotly_chart(fig,use_container_width=True)
 
@@ -420,7 +425,7 @@ with t3:
     fig=go.Figure(go.Heatmap(z=piv.values,x=piv.columns.tolist(),y=piv.index.tolist(),
         colorscale=[[0,BG],[0.3,MID],[0.6,PRI],[1,ACC]],
         text=[[fmt(v) for v in r] for r in piv.values],
-        texttemplate="%{text}",textfont_color=WHITE))
+        texttemplate="%{text}",textfont=dict(color=WHITE)))
     fig.update_layout(**TH(title_text="Unidades/mes — Categoria x Tendencia",height=380,margin=dict(l=20,r=80,t=50,b=30)))
     st.plotly_chart(fig,use_container_width=True)
 
@@ -455,7 +460,7 @@ with t5:
         fig=px.treemap(DF,path=["cat","sub"],values="vol_usd",color="score",
             color_continuous_scale=[[0,MID],[0.5,PRI],[1,ACC]])
         fig.update_layout(**TH(title_text="Mapa de Oportunidades por Volumen USD",height=400,margin=dict(l=10,r=10,t=50,b=10)))
-        fig.update_traces(textfont_color=WHITE,marker_line_color=BG,marker_line_width=2)
+        fig.update_traces(textfont=dict(color=WHITE),marker_line_color=BG,marker_line_width=2)
         st.plotly_chart(fig,use_container_width=True)
     with c2:
         dfo=DF.nlargest(10,"margen")
