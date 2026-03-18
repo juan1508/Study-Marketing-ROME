@@ -48,9 +48,6 @@ div[data-testid="metric-container"] label{color:#A8D8F0!important;font-size:.82r
 .streamlit-expanderHeader{background:#1A3A5C80!important;border:1px solid #1E5FAD30!important;border-radius:10px!important;color:#DDE8F5!important;}
 hr{border-color:#1E5FAD30!important;}
 #MainMenu,footer,header{visibility:hidden;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;}
-section[data-testid="stSidebar"]{min-width:260px!important;}
-[data-testid="stSidebarNavItems"]{display:block!important;}
 .card{background:linear-gradient(135deg,#1A3A5C,#0D2137);border:1px solid #54A0FF40;border-radius:12px;padding:16px;margin-bottom:12px;}
 .ba{background:#00B89425;color:#00B894;border:1px solid #00B89450;border-radius:20px;padding:2px 10px;font-size:.75rem;font-weight:600;}
 .bm{background:#FDCB6E25;color:#FDCB6E;border:1px solid #FDCB6E50;border-radius:20px;padding:2px 10px;font-size:.75rem;font-weight:600;}
@@ -257,27 +254,48 @@ st.markdown("<hr style='margin:8px 0 20px 0;'>",unsafe_allow_html=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(f'<div style="text-align:center;font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:{WHITE};padding:16px 0 8px;">FILTROS</div>',unsafe_allow_html=True)
-    st.markdown("---")
-    cats=["Todas"]+sorted(DF["cat"].dropna().unique().tolist())
-    cat_s=st.selectbox("Categoria",cats)
-    tgt_s=st.selectbox("Target",["Todos","Femenino","Masculino","Mixto"])
-    pr=st.slider("Precio USD",0,250,(0,250))
-    ts=st.multiselect("Tendencia",["muy_creciente","creciente","estable","decreciente"],
-                      default=["muy_creciente","creciente","estable","decreciente"])
-    rs=st.multiselect("Rotacion",["muy_alta","alta","media_alta","media","baja"],
-                      default=["muy_alta","alta","media_alta","media","baja"])
-    rm=st.slider("Rating min",1.0,5.0,4.0,0.1)
-    st.markdown("---")
-    sb=st.radio("Ordenar por",["unidades","vol_usd","score","rating"],
-                format_func=lambda x:{"unidades":"Unidades/mes","vol_usd":"Volumen USD","score":"Score","rating":"Rating"}[x])
-    st.markdown("---")
-    ac=len(api_rows)
-    clr=GREEN if ac>0 else YEL
-    st.markdown(f'<div style="background:{clr}18;border:1px solid {clr}60;border-radius:10px;padding:10px;text-align:center;"><div style="color:{clr};font-weight:700;font-size:.75rem;">{"En vivo" if ac>0 else "Datos locales"}</div><div style="color:{TEXT};font-size:.8rem;margin-top:4px;">Local: {len(LP)} | API: {ac}</div><div style="color:{PALE};font-size:.72rem;margin-top:2px;">{len(DF)} productos</div></div>',unsafe_allow_html=True)
-    st.markdown("<br>",unsafe_allow_html=True)
-    if st.button("Recargar",use_container_width=True):
-        st.cache_data.clear(); st.rerun()
+    st.title("🎛️ Filtros")
+    st.divider()
+
+    cats = ["Todas"] + sorted(DF["cat"].dropna().unique().tolist())
+    cat_s = st.selectbox("📂 Categoría", cats)
+    tgt_s = st.selectbox("👤 Target", ["Todos", "Femenino", "Masculino", "Mixto"])
+
+    st.markdown("**💰 Precio USD**")
+    pr = st.slider("Precio", 0, 250, (0, 250), label_visibility="collapsed")
+
+    ts = st.multiselect("📈 Tendencia",
+        ["muy_creciente", "creciente", "estable", "decreciente"],
+        default=["muy_creciente", "creciente", "estable", "decreciente"],
+        format_func=lambda x: {"muy_creciente":"🚀 Muy Creciente","creciente":"📈 Creciente",
+                                "estable":"➡️ Estable","decreciente":"📉 Decreciente"}[x])
+
+    rs = st.multiselect("🔄 Rotación",
+        ["muy_alta", "alta", "media_alta", "media", "baja"],
+        default=["muy_alta", "alta", "media_alta", "media", "baja"],
+        format_func=lambda x: {"muy_alta":"🔵 Muy Alta","alta":"🟢 Alta",
+                                "media_alta":"🟡 Media-Alta","media":"🟡 Media","baja":"🔴 Baja"}[x])
+
+    rm = st.slider("⭐ Rating mínimo", 1.0, 5.0, 4.0, 0.1)
+
+    st.divider()
+    sb = st.radio("📊 Ordenar por",
+        ["unidades", "vol_usd", "score", "rating"],
+        format_func=lambda x: {"unidades":"🔢 Unidades/mes","vol_usd":"💵 Volumen USD",
+                                "score":"🎯 Score","rating":"⭐ Rating"}[x])
+
+    st.divider()
+    ac = len(api_rows)
+    if ac > 0:
+        st.success(f"🟢 En vivo — {ac} productos de API")
+    else:
+        st.warning("🟡 Solo datos locales")
+    st.caption(f"{len(DF)} productos totales · {len(LP)} locales · {ac} API")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔄 Recargar datos", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 # ── Filtrar ───────────────────────────────────────────────────────
 df=DF.copy()
