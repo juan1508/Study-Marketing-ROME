@@ -667,89 +667,121 @@ with T3:
     st.plotly_chart(fig, use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════
-# TAB 4 — OPORTUNIDADES
+# TAB 4 — OPORTUNIDADES NICHO
 # ═══════════════════════════════════════════════════════════════
 with T4:
-    st.markdown(f'<h3 style="color:{WHT};font-family:Syne,sans-serif;margin-bottom:16px;">🎯 Oportunidades de Mercado</h3>', unsafe_allow_html=True)
+    st.markdown(f'<h3 style="color:{WHT};font-family:Syne,sans-serif;margin-bottom:4px;">🎯 Oportunidades de Nicho — Entra antes que la competencia</h3>', unsafe_allow_html=True)
+    st.caption("Productos con alta demanda LATENTE en Colombia pero baja penetracion actual. Tendencia confirmada en TikTok y mercados USA/Europa. Fuente: ML Colombia 2025 + TikTok trends + Nubimetrics.")
 
-    c1,c2 = st.columns(2)
-    with c1:
-        # Treemap volumen × rentabilidad
-        fig = px.treemap(DF, path=["cat","sub"], values="unidades",
-            color="pv_mercado",
-            color_continuous_scale=[[0,MID],[0.5,PRI],[1,ACC]],
-            hover_data=["nombre","precio_usd","pv_mercado"])
-        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color=TEXT,
-            height=420, margin=dict(l=10,r=10,t=40,b=10),
-            title_text="Volumen × PV Mercado Colombia", title_font_color=WHT,
-            coloraxis_colorbar=dict(tickfont=dict(color=PALE)))
-        fig.update_traces(textfont=dict(color=WHT),
-                          marker_line_color=BG, marker_line_width=2)
-        st.plotly_chart(fig, use_container_width=True)
+    import math as _math
 
-    with c2:
-        # Scatter precio_usd vs pv_mercado colombia — identificar margen de importación
-        fig = px.scatter(DF, x="precio_usd", y="pv_mercado",
-            size="unidades", color="cat",
+    NICHOS = [
+        {"emoji":"🧪","nombre":"Tirtir Milk Skin Toner","marca":"TIRTIR (Korea)","cat":"K-Beauty","precio_usd":22.00,"pv_co_est":145000,"score":9,"penet":"5%","tend":"muy_creciente","por_que":"Base coreana viral en Ulta Beauty USA. Llegando a TikTok Latinoamerica. En ML Colombia casi sin stock.","problema":"Poros, tono desigual, piel de cristal","publico":"Mujeres 18-35 K-Beauty","comp_co":"Muy baja — 3 vendedores ML","url":"https://yesstyle.com/tirtir","fuente":"TikTok #tirtir 50M vistas | Ulta Beauty top seller 2025"},
+        {"emoji":"💡","nombre":"LED Red Light Therapy Mask","marca":"Currentbody / Omnilux","cat":"Tecnologia Beauty","precio_usd":195.00,"pv_co_est":1300000,"score":9,"penet":"3%","tend":"muy_creciente","por_que":"Aprobada FDA, viral en BeautyTok. En Colombia casi desconocida. Crecimiento 200% en USA 2024-2025.","problema":"Acne, anti-envejecimiento, firmeza piel","publico":"Mujeres 28-50 tecnologia anti-age","comp_co":"Casi nula — nicho de lujo sin explotar","url":"https://currentbody.com/led-light-therapy","fuente":"#redlighttherapy 2B vistas TikTok | FDA approved"},
+        {"emoji":"🌿","nombre":"Mixsoon Bean Essence (Soya)","marca":"Mixsoon (Korea)","cat":"K-Beauty","precio_usd":28.00,"pv_co_est":185000,"score":8,"penet":"4%","tend":"muy_creciente","por_que":"Esencia de soya coreana viral en TikTok skincare. Colombia practicamente sin oferta.","problema":"Hidratacion profunda, barrera cutanea","publico":"Femenino 20-40 K-Beauty","comp_co":"Baja — 5-8 vendedores ML","url":"https://yesstyle.com/mixsoon","fuente":"Kbeauty growing 40% LATAM 2025"},
+        {"emoji":"🔵","nombre":"Ice Roller Facial Crioterapia","marca":"Esker / varias","cat":"Herramientas Skincare","precio_usd":18.00,"pv_co_est":95000,"score":8,"penet":"12%","tend":"creciente","por_que":"Viral en TikTok como skincare tool. Bajo precio, alto margen. En Colombia sin marca posicionada.","problema":"Poros, inflamacion, puffiness facial","publico":"Mujeres 18-45 activas en redes","comp_co":"Media-baja — sin branding fuerte","url":"https://amazon.com/dp/B07YB5GXGT","fuente":"#iceroller TikTok 800M vistas | Viral Primor Espana 2025"},
+        {"emoji":"✨","nombre":"Elroel Blanc Stick V (Base Blanca Viral)","marca":"Elroel (Korea)","cat":"K-Beauty Maquillaje","precio_usd":25.00,"pv_co_est":165000,"score":9,"penet":"2%","tend":"muy_creciente","por_que":"Base en barra blanca que se adapta a todos los tonos. Madison Beer la usa. En Colombia practicamente inexistente.","problema":"Base universal, efecto glowy, tratamiento collageno","publico":"Femenino 18-30 Generacion Z","comp_co":"Muy baja — novedad absoluta","url":"https://yesstyle.com/elroel","fuente":"Viral GetGlam 2025 | Premio belleza multiple"},
+        {"emoji":"🧴","nombre":"Summer Fridays Jet Lag Mask","marca":"Summer Fridays","cat":"Skincare Premium","precio_usd":42.00,"pv_co_est":280000,"score":7,"penet":"8%","tend":"muy_creciente","por_que":"Mascarilla hidratante viral en TikTok y Sephora. Se agota en USA. Colombia empieza a pedirla.","problema":"Piel opaca, deshidratacion, barrera danada","publico":"Femenino 25-45 premium","comp_co":"Baja — pocos importadores","url":"https://amazon.com/dp/B07NQPBZ5X","fuente":"Sephora top seller 2025 | TikTok #summerFridays viral"},
+        {"emoji":"💆","nombre":"Gua Sha Tool Premium (Cuarzo Rosa)","marca":"Mount Lai / Herbivore","cat":"Herramientas Skincare","precio_usd":30.00,"pv_co_est":160000,"score":7,"penet":"15%","tend":"creciente","por_que":"Tendencia bienestar facial sostenida. Colombia crece pero sin marcas premium. Oportunidad premium vs genericas.","problema":"Tension facial, drenaje linfatico, lineas expresion","publico":"Femenino 25-50 bienestar","comp_co":"Media — muchas genericas, poca marca","url":"https://amazon.com/dp/B07VXQMPP9","fuente":"#guasha TikTok 4B vistas | Wellness trend sostenida"},
+        {"emoji":"🩹","nombre":"Pimple Patches Cosrx / Hero Cosmetics","marca":"Cosrx / Hero Cosmetics","cat":"Skincare Acne","precio_usd":14.00,"pv_co_est":75000,"score":7,"penet":"18%","tend":"creciente","por_que":"Producto de uso diario, alta recompra. En ML Colombia hay demanda pero poca oferta de marcas reconocidas.","problema":"Acne, espinillas, puntos blancos","publico":"Mixto 14-30","comp_co":"Media — genericas dominan, marcas poco","url":"https://amazon.com/dp/B07AP2NRSP","fuente":"ML Colombia: alta busqueda, baja oferta branded"},
+        {"emoji":"🌸","nombre":"PDRN / Exosoma Serum (Salmon DNA)","marca":"VT Cosmetics / Axis-Y","cat":"K-Beauty Premium","precio_usd":55.00,"pv_co_est":380000,"score":10,"penet":"1%","tend":"muy_creciente","por_que":"Tendencia skincare 2025 confirmada por dermatologos. En Colombia practicamente NADIE lo vende aun. Oportunidad historica.","problema":"Anti-envejecimiento avanzado, regeneracion celular","publico":"Femenino 35-55 premium","comp_co":"Nula — oportunidad de primer entrante","url":"https://yesstyle.com/vt-cosmetics","fuente":"TikTok #pdrn #exosomes trending 2025 | Derm Times 2025"},
+        {"emoji":"💊","nombre":"Tranexamic Acid Serum","marca":"The Inkey List / Good Molecules","cat":"Skincare Activos","precio_usd":15.00,"pv_co_est":95000,"score":8,"penet":"6%","tend":"muy_creciente","por_que":"El nuevo acido hialuronico. Viral BeautyTok. En Colombia casi sin oferta. Demanda creciendo 300%.","problema":"Manchas, hiperpigmentacion, tono desigual","publico":"Mixto 20-45","comp_co":"Baja — pocos lo conocen aun","url":"https://amazon.com/dp/B08CZDVS64","fuente":"ML Colombia: busquedas up 300% 2025 | #tranexamicacid trending"},
+        {"emoji":"🧖","nombre":"Scalp Serum (suero cuero cabelludo)","marca":"The Ordinary / Act+Acre","cat":"Cabello Premium","precio_usd":22.00,"pv_co_est":135000,"score":8,"penet":"5%","tend":"muy_creciente","por_que":"Skincare para cuero cabelludo: tendencia 2025. Nubimetrics: cabello +40% CO. Subcategoria serums capilares casi sin explotar.","problema":"Caida, cuero cabelludo inflamado, crecimiento","publico":"Mixto 25-50","comp_co":"Baja — categoria nueva en Colombia","url":"https://amazon.com/the-ordinary-hair-serum","fuente":"Nubimetrics cabello +40% ML Colombia 2025 | #scalpcare"},
+        {"emoji":"🌊","nombre":"Shampoo Barra Solido (Waterless Beauty)","marca":"Ethique / HiBar / Lush","cat":"Belleza Sostenible","precio_usd":16.00,"pv_co_est":95000,"score":8,"penet":"4%","tend":"creciente","por_que":"Cosmetica organica proyecta USD 15B 2025. Consumidor colombiano eco-consciente creciendo. Nicho con margen alto.","problema":"Cabello, sostenibilidad, sin plastico","publico":"Mixto 22-40 eco-consciente","comp_co":"Muy baja — nicho practicamente virgen","url":"https://ethique.com","fuente":"Inexmoda 2025: natural/organico CAGR 8.91% Colombia"},
+        {"emoji":"💈","nombre":"VT Reedle Shot 100 (Ampollas Microagujas)","marca":"VT Cosmetics (Korea)","cat":"K-Beauty Cabello","precio_usd":35.00,"pv_co_est":220000,"score":9,"penet":"2%","tend":"muy_creciente","por_que":"VT Reedle Shot viral en TikTok Colombia. Ampollas microagujas cuero cabelludo. Completamente nuevo. Primeros vendedores tienen ventaja total.","problema":"Caida capilar, cuero cabelludo debilitado","publico":"Mixto 25-50 premium","comp_co":"Casi nula — pionero absoluto","url":"https://yesstyle.com/vt-cosmetics","fuente":"TikTok Colombia skincare 2025 | Satinskincare.com"},
+        {"emoji":"🕯️","nombre":"Kayali Perfume Eden Juicy Apple","marca":"Kayali by Huda Beauty","cat":"Fragancias Nicho","precio_usd":98.00,"pv_co_est":620000,"score":8,"penet":"5%","tend":"muy_creciente","por_que":"Fragancias nicho: mercado perfumes Colombia +40% online 2024. Kayali viral TikTok. Casi sin distribucion en Colombia.","problema":"Fragancia premium, diferenciacion, lujo accesible","publico":"Femenino 22-45 premium","comp_co":"Baja — sin distribuidor oficial","url":"https://hudabeauty.com/kayali","fuente":"Inexmoda: perfumes online +40% Colombia 2024 | TikTok viral"},
+        {"emoji":"🪥","nombre":"Cepillo Electrico Premium Oral-B iO","marca":"Oral-B iO Series","cat":"Cuidado Dental Beauty","precio_usd":89.00,"pv_co_est":520000,"score":7,"penet":"8%","tend":"creciente","por_que":"Cepillos electricos premium: mercado dental-beauty en auge. Colombia baja penetracion. Alta percepcion de valor.","problema":"Higiene dental premium, blanqueamiento, encias","publico":"Mixto 25-50 clase media-alta","comp_co":"Media — sin importadores dedicados beauty-dental","url":"https://amazon.com/dp/B08XBGYWZR","fuente":"Categoria dental-beauty: crecimiento 35% LATAM 2025"},
+    ]
+
+    def nicho_precio(p_usd, pv_co):
+        costo = round(p_usd * TRM)
+        devs = round(pv_co * 0.20); cpac = round(pv_co * 0.15)
+        rent = pv_co - costo - 18000 - devs - cpac
+        rp   = round(rent/pv_co*100,1) if pv_co>0 else 0
+        pe   = _math.ceil((costo+18000)/0.65/1000)*1000
+        return costo, rent, rp, pe
+
+    # KPIs
+    n10 = sum(1 for n in NICHOS if n["score"]>=9)
+    n8  = sum(1 for n in NICHOS if 7<=n["score"]<9)
+    k1,k2,k3,k4 = st.columns(4)
+    with k1: st.metric("Oportunidades Nicho", len(NICHOS))
+    with k2: st.metric("Score ORO (9-10)", f"{n10} productos")
+    with k3: st.metric("Score PLATA (7-8)", f"{n8} productos")
+    with k4: st.metric("Penetracion prom. CO", "~6%", delta="94% sin explotar")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Grafico scatter score vs rentabilidad
+    nr = []
+    for n in NICHOS:
+        c,r,rp,pe = nicho_precio(n["precio_usd"],n["pv_co_est"])
+        nr.append({"nombre":n["nombre"][:35],"cat":n["cat"],"score":n["score"],"rent":rp,"pv":n["pv_co_est"],"penet":int(n["penet"].replace("%",""))})
+    dfn = pd.DataFrame(nr)
+
+    g1,g2 = st.columns(2)
+    with g1:
+        fig = px.scatter(dfn, x="score", y="rent", size="pv", color="cat",
             hover_name="nombre",
-            color_discrete_sequence=px.colors.sequential.Blues_r,
-            labels={"precio_usd":"Precio USD","pv_mercado":"PV Colombia COP","cat":"Cat."})
-        # Línea de referencia TRM
-        max_usd = DF["precio_usd"].max()
-        fig.add_trace(go.Scatter(
-            x=[0, max_usd], y=[0, max_usd*TRM*2],
-            mode="lines", name=f"Referencia TRM×2 ({TRM*2:,})",
-            line=dict(color=GOLD, dash="dash", width=1)))
-        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(13,33,55,0.6)",
-            font_color=TEXT, height=420, margin=dict(l=10,r=10,t=40,b=30),
-            title_text="Precio USD vs PV Colombia (burbujas = volumen)", title_font_color=WHT,
-            legend=dict(orientation="h", y=-0.2, font_size=9, bgcolor="rgba(0,0,0,0)"))
+            labels={"score":"Score Nicho (1-10)","rent":"Rentabilidad %","cat":"Categoria"},
+            color_discrete_sequence=px.colors.sequential.Blues_r)
+        fig.add_hline(y=30,line_dash="dash",line_color=GRN,annotation_text="Meta 30%",annotation_font_color=GRN)
+        fig.add_vline(x=8,line_dash="dash",line_color=GOLD,annotation_text="Nicho Premium",annotation_font_color=GOLD)
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(13,33,55,0.6)",
+            font_color=TEXT,height=360,title_text="Score Nicho vs Rentabilidad",title_font_color=WHT,
+            margin=dict(l=20,r=20,t=50,b=50),
+            legend=dict(orientation="h",y=-0.3,font_size=9,bgcolor="rgba(0,0,0,0)"))
         st.plotly_chart(fig, use_container_width=True)
 
-    # Top oportunidades: mayor ratio PV_Colombia / Costo
-    st.markdown(f'<h4 style="color:{ACC};font-family:Syne,sans-serif;margin:20px 0 10px;">💎 Top 15 — Mayor Potencial de Margen</h4>', unsafe_allow_html=True)
-    DF["ratio_margen"] = (DF["pv_mercado"] / DF["costo_cop"]).round(2)
-    top_opp = DF.nlargest(15,"ratio_margen")[["nombre","marca","cat","precio_usd","costo_cop","pv_mercado","ratio_margen","unidades","rot","tend"]].copy()
-    top_opp.columns = ["Producto","Marca","Cat.","Precio USD","Costo COP","PV Mercado CO","Ratio PV/Costo","Unid/mes","Rotacion","Tendencia"]
-    top_opp["Precio USD"]    = top_opp["Precio USD"].apply(lambda x: f"${x:.2f}")
-    top_opp["Costo COP"]     = top_opp["Costo COP"].apply(lambda x: f"${x:,}")
-    top_opp["PV Mercado CO"] = top_opp["PV Mercado CO"].apply(lambda x: f"${x:,}")
-    top_opp["Ratio PV/Costo"]= top_opp["Ratio PV/Costo"].apply(lambda x: f"×{x:.1f}")
-    top_opp["Unid/mes"]      = top_opp["Unid/mes"].apply(lambda x: f"{x:,}")
-    top_opp["Tendencia"]     = top_opp["Tendencia"].map({"muy_creciente":"🚀","creciente":"📈","estable":"➡️","decreciente":"📉"})
-    top_opp["Rotacion"]      = top_opp["Rotacion"].map({"muy_alta":"🔵 Muy alta","alta":"🟢 Alta","media_alta":"🟡 Media-alta","media":"🟡 Media","baja":"🔴 Baja"})
-    st.dataframe(top_opp, use_container_width=True, hide_index=True, height=420)
+    with g2:
+        dfn_s = dfn.sort_values("score",ascending=True)
+        bar_c = [GRN if s>=9 else ACC if s>=7 else YEL for s in dfn_s["score"]]
+        fig = go.Figure(go.Bar(
+            y=dfn_s["nombre"], x=dfn_s["score"], orientation="h",
+            marker_color=bar_c,
+            text=[f"Score {s}/10" for s in dfn_s["score"]],
+            textposition="outside", textfont=dict(color=WHT,size=10)))
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(13,33,55,0.6)",
+            font_color=TEXT,height=360,title_text="Score por Producto",title_font_color=WHT,
+            margin=dict(l=10,r=80,t=50,b=10),xaxis_range=[0,11],showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Radar competitividad
-    st.markdown(f'<h4 style="color:{ACC};font-family:Syne,sans-serif;margin:20px 0 10px;">🕸️ Radar de Competitividad por Categoría</h4>', unsafe_allow_html=True)
-    rc = DF.groupby("cat").agg(
-        rating=("rating","mean"),
-        pv_norm=("pv_mercado", lambda x: x.mean()/10000),
-        unidades=("unidades", lambda x: x.mean()/10000),
-        ratio=("ratio_margen","mean"),
-        vol=("vol_usd", lambda x: x.mean()/100000)
-    ).reset_index()
-    cats_r = rc["cat"].head(6).tolist()
-    mlab   = ["Rating","PV(×10K)","Vol(×10K)","Ratio","Ingreso(×100K)"]
-    mcol   = ["rating","pv_norm","unidades","ratio","vol"]
-    mmax   = [5, 20, 20, 5, 5]
-    cols_r = [ACC,GOLD,GRN,YEL,PALE,BRT]
-    fig = go.Figure()
-    for i, cat in enumerate(cats_r):
-        rr = rc[rc["cat"]==cat].iloc[0]
-        vals = [min(float(rr[m])/(mx or 1)*10,10) for m,mx in zip(mcol,mmax)]
-        vals.append(vals[0])
-        fig.add_trace(go.Scatterpolar(
-            r=vals, theta=mlab+[mlab[0]],
-            fill="toself", name=cat, opacity=0.8,
-            line_color=cols_r[i%len(cols_r)], line_width=2))
-    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color=TEXT,
-        polar_bgcolor="rgba(13,33,55,0.5)",
-        title_text="Radar — Top 6 Categorías", title_font_color=WHT,
-        height=420, legend=dict(orientation="h",y=-0.1,font_size=10,bgcolor="rgba(0,0,0,0)"))
-    st.plotly_chart(fig, use_container_width=True)
+    # Tarjetas
+    st.markdown(f'<h4 style="color:{ACC};font-family:Syne,sans-serif;margin:20px 0 14px;">💎 Fichas Detalladas de Oportunidades</h4>', unsafe_allow_html=True)
+    score_min = st.slider("Score minimo:", 1, 10, 7)
+    filtrados = sorted([n for n in NICHOS if n["score"]>=score_min], key=lambda x:-x["score"])
+    st.caption(f"Mostrando {len(filtrados)} oportunidades con score >= {score_min}")
 
-# ═══════════════════════════════════════════════════════════════
+    for n in filtrados:
+        costo,rent,rp,pe = nicho_precio(n["precio_usd"],n["pv_co_est"])
+        sc = n["score"]
+        sc_c = GRN if sc>=9 else ACC if sc>=7 else YEL
+        sc_l = "ORO" if sc>=9 else "PLATA" if sc>=7 else "BRONCE"
+        r_c  = GRN if rp>=25 else YEL if rp>=10 else RED
+        tent = {"muy_creciente":"Muy Creciente","creciente":"Creciente","estable":"Estable"}.get(n["tend"],"")
+
+        with st.expander(f"{n['emoji']} Score {sc}/10 — {sc_l} | {n['nombre']} · {n['marca']}", expanded=(sc>=9)):
+            ca,cb,cc,cd = st.columns(4)
+            with ca: st.metric("Precio proveedor", f"${n['precio_usd']:.2f} USD")
+            with cb: st.metric("PV estimado CO",   f"${n['pv_co_est']:,} COP")
+            with cc: st.metric("Rentabilidad est.", f"{rp}%")
+            with cd: st.metric("Penetracion CO",    n["penet"])
+
+            col1,col2 = st.columns([3,2])
+            with col1:
+                st.markdown(f"**Por que es oportunidad:**")
+                st.markdown(n["por_que"])
+                st.markdown(f"**Problema que resuelve:** {n['problema']}")
+                st.markdown(f"**Publico objetivo:** {n['publico']}")
+            with col2:
+                st.markdown(f"**Competencia en Colombia:** {n['comp_co']}")
+                st.markdown(f"**Tendencia global:** {tent}")
+                st.markdown(f"**Punto de equilibrio:** ${pe:,} COP")
+                st.markdown(f"**Categoria:** {n['cat']}")
+                st.markdown(f"**Fuente dato:** {n['fuente']}")
+                st.link_button("🔗 Ver producto / proveedor", n["url"])
+
+
 # TAB 5 — ANÁLISIS POR PRODUCTO
 # ═══════════════════════════════════════════════════════════════
 with T5:
