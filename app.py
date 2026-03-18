@@ -312,18 +312,12 @@ def theme():
         title_font=dict(family="Syne", size=15, color="#EEF6FF"),
     )
 
-def ax(title="", tickangle=0, extra=None):
-    """Returns safe axis style dict for Plotly update_layout."""
-    d = {
-        "gridcolor": "#1E5FAD25",
-        "linecolor": "#1A3A5C",
-        "tickcolor": "#A8D8F0",
-        "tickfont":  {"color": "#A8D8F0", "size": 11},
-    }
-    if title:     d["title"] = {"text": title, "font": {"color": "#A8D8F0"}}
-    if tickangle: d["tickangle"] = tickangle
-    if extra:     d.update(extra)
-    return d
+# ax() removed — use fig.update_xaxes() / fig.update_yaxes() instead
+AXIS_STYLE = dict(
+    gridcolor="#1E5FAD25",
+    linecolor="#1A3A5C",
+    tickfont_color="#A8D8F0",
+)
 
 def gen_prices(base, months=12):
     np.random.seed(int(base*100) % 9999)
@@ -459,13 +453,12 @@ with tab1:
             textposition="outside",
             textfont=dict(color="#EEF6FF", size=11),
         ))
-        fig.update_layout(
-            **theme(), height=400,
-            margin=dict(l=10,r=100,t=20,b=10),
-            showlegend=False,
-            xaxis=ax(title=sort_by.replace("_"," ").title()),
-            yaxis=ax(extra={"categoryorder":"total ascending"}),
-        )
+        fig.update_layout(**theme(), height=400,
+            margin=dict(l=10,r=100,t=20,b=10), showlegend=False)
+        fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0",
+            title_text=sort_by.replace("_"," ").title())
+        fig.update_yaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0",
+            categoryorder="total ascending")
         st.plotly_chart(fig, use_container_width=True)
 
         for i, row in top10.iterrows():
@@ -547,7 +540,9 @@ with tab2:
         ))
         fig.update_layout(**theme(), title="Volumen Mensual por Categoria (USD)",
                           height=300, margin=dict(l=10,r=90,t=50,b=10), showlegend=False,
-                          xaxis=ax(), yaxis=ax())
+)
+        fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
+        fig.update_yaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
         st.plotly_chart(fig, use_container_width=True)
 
     # Simulador
@@ -569,7 +564,8 @@ with tab2:
     fig.update_layout(**theme(), title=f"Precio vs Rotacion — {sel[:45]}",
                       height=350, margin=dict(l=20,r=20,t=50,b=40),
                       legend=dict(orientation="h",y=1.05,bgcolor="rgba(0,0,0,0)"),
-                      hovermode="x unified", xaxis=ax())
+                      hovermode="x unified")
+    fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
     fig.update_yaxes(title_text="Precio USD",    secondary_y=False, gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont={"color":"#A8D8F0"})
     fig.update_yaxes(title_text="Unidades/mes",  secondary_y=True,  gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont={"color":"#A8D8F0"})
     st.plotly_chart(fig, use_container_width=True)
@@ -604,8 +600,9 @@ with tab3:
             labels={"precio":"Precio USD","rating":"Rating","cat":"Categoria"})
         fig.update_layout(**theme(), title="Precio vs Rating (tamano = volumen)",
                           height=360, margin=dict(l=20,r=20,t=50,b=30),
-                          xaxis=ax(), yaxis=ax(),
                           legend=dict(orientation="h",y=-0.28,font=dict(size=9),bgcolor="rgba(0,0,0,0)"))
+        fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
+        fig.update_yaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
@@ -618,7 +615,9 @@ with tab3:
             labels={"rango":"Rango precio","unidades":"Unidades/mes"})
         fig.update_layout(**theme(), title="Volumen por Rango de Precio",
                           height=360, showlegend=False, margin=dict(l=20,r=20,t=50,b=30),
-                          xaxis=ax(), yaxis=ax())
+)
+        fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
+        fig.update_yaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
         st.plotly_chart(fig, use_container_width=True)
 
     # Heatmap
@@ -635,7 +634,9 @@ with tab3:
     ))
     fig.update_layout(**theme(), title="Unidades/mes — Categoria x Tendencia",
                       height=380, margin=dict(l=20,r=80,t=50,b=30),
-                      xaxis=ax(), yaxis=ax())
+)
+    fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
+    fig.update_yaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
     st.plotly_chart(fig, use_container_width=True)
 
 # ────────── TAB 4: EXPLORADOR ──────────
@@ -693,8 +694,9 @@ with tab5:
                           barmode="group", height=400,
                           margin=dict(l=10,r=10,t=50,b=90),
                           legend=dict(orientation="h",y=1.05,bgcolor="rgba(0,0,0,0)"),
-                          xaxis=ax(tickangle=-35, extra={"tickfont":{"color":"#A8D8F0","size":9}}),
-                          yaxis=ax())
+)
+        fig.update_xaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0", tickangle=-35)
+        fig.update_yaxes(gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont_color="#A8D8F0")
         st.plotly_chart(fig, use_container_width=True)
 
     # Radar
