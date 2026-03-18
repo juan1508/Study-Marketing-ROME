@@ -1,9 +1,7 @@
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  ESTUDIO DE MERCADO ROME — app.py                               ║
-║  Archivo único — no requiere módulos externos                   ║
-║  Datos en vivo: Makeup API · Open Beauty Facts · Open Food Facts║
-╚══════════════════════════════════════════════════════════════════╝
+ESTUDIO DE MERCADO ROME
+Inteligencia Comercial Global · Belleza & Cuidado Personal
+Carga instantánea con datos locales + APIs opcionales en background
 """
 
 import streamlit as st
@@ -14,547 +12,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import requests
-import sys
-import os
 
-
-# ─────────────────────────────────────────────
-# CONFIGURACIÓN DE FUENTES
-# ─────────────────────────────────────────────
-
-SOURCES = {
-    "openbeautyfacts": "https://world.openbeautyfacts.org/cgi/search.pl",
-    "openfoodfacts":   "https://world.openfoodfacts.org/cgi/search.pl",
-    "makeup_api":      "https://makeup-api.herokuapp.com/api/v1/products.json",
-}
-
-# Headers para parecer browser real
-HEADERS = {
-    "User-Agent": "RomeMarketStudy/1.0 (market research; contact@romemarket.com)",
-    "Accept": "application/json",
-}
-
-# Categorías de búsqueda → términos por fuente
-SEARCH_CONFIG = [
-    # (categoria, subcategoria, termino_beauty, termino_food, tipo_makeup, target, problema)
-    ("Piel",             "Sueros y Activos",   "serum niacinamide",     None,               "serum",       "Mixto",     "Poros, manchas, brillo"),
-    ("Piel",             "Vitamina C",          "vitamin c serum",       None,               "serum",       "Femenino",  "Manchas, envejecimiento, opacidad"),
-    ("Piel",             "Retinol",             "retinol cream",         None,               "moisturizer", "Mixto",     "Arrugas, acné, cicatrices"),
-    ("Piel",             "Hidratación",         "moisturizer hyaluronic",None,               "moisturizer", "Mixto",     "Sequedad, barrera cutánea"),
-    ("Piel",             "Acné",                "acne treatment benzoyl",None,               "face wash",   "Mixto",     "Acné, poros, exceso grasa"),
-    ("Piel",             "Manchas",             "dark spot corrector",   None,               "serum",       "Femenino",  "Hiperpigmentación, manchas"),
-    ("Piel",             "Celulitis",           "cellulite cream caffeine",None,             "lip liner",   "Femenino",  "Celulitis, flacidez"),
-    ("Piel",             "Estrías",             "stretch mark oil",      None,               "moisturizer", "Femenino",  "Estrías, cicatrices"),
-    ("Cabello",          "Caída",               "hair growth biotin",    "biotin hair",      None,          "Mixto",     "Caída del cabello, alopecia"),
-    ("Cabello",          "Reparación",          "hair repair olaplex",   None,               None,          "Femenino",  "Cabello quebradizo, sin brillo"),
-    ("Cabello",          "Caspa",               "anti dandruff shampoo", None,               None,          "Mixto",     "Caspa, dermatitis seborreica"),
-    ("Envejecimiento",   "Arrugas",             "anti aging retinol",    None,               "moisturizer", "Femenino",  "Arrugas, líneas expresión"),
-    ("Envejecimiento",   "Colágeno",            "collagen peptides",     "collagen peptides",None,          "Femenino",  "Arrugas, uñas, cabello"),
-    ("Envejecimiento",   "Firmeza",             "firming cream neck",    None,               "moisturizer", "Femenino",  "Flacidez, pérdida firmeza"),
-    ("Maquillaje",       "Base",                None,                    None,               "foundation",  "Femenino",  "Tono desigual, imperfecciones"),
-    ("Maquillaje",       "Labios",              None,                    None,               "lip liner",   "Femenino",  "Labios finos, sin definición"),
-    ("Maquillaje",       "Ojos",                None,                    None,               "mascara",     "Femenino",  "Pestañas cortas, cejas escasas"),
-    ("Maquillaje",       "Contorno",            None,                    None,               "bronzer",     "Femenino",  "Definición facial"),
-    ("Maquillaje",       "Primer",              None,                    None,               "primer",      "Femenino",  "Poros, maquillaje duradero"),
-    ("Skincare Premium", "Protector Solar",     "sunscreen spf mineral", None,               "moisturizer", "Mixto",     "Daño solar, manchas, envejecimiento"),
-    ("Skincare Premium", "Tónico",              "toner aha bha exfoliant",None,              "face wash",   "Femenino",  "Poros, textura, manchas"),
-    ("Skincare Premium", "Mascarilla",          "clay mask face",        None,               "moisturizer", "Mixto",     "Acné, poros, impurezas"),
-    ("Cuerpo",           "Masa Muscular",       None,                    "whey protein",     None,          "Masculino", "Falta masa muscular"),
-    ("Cuerpo",           "Grasa Localizada",    "fat burning cream",     None,               "moisturizer", "Mixto",     "Grasa localizada, abdomen"),
-    ("Bienestar",        "Suplementos Piel",    "skin supplement glow",  "collagen beauty",  None,          "Femenino",  "Piel opaca, acné interno"),
-    ("Bienestar",        "Pérdida de Peso",     None,                    "weight loss supplement", None,    "Mixto",     "Exceso de peso, metabolismo"),
-    ("Vello",            "Depilación",          "hair removal cream",    None,               None,          "Femenino",  "Vello facial, corporal"),
-    ("Sudoración",       "Desodorante",         "natural deodorant aluminum free", None,     None,          "Mixto",     "Mal olor, hiperhidrosis"),
-    ("Manos y Uñas",     "Uñas Frágiles",       "nail strengthener hardener", None,          "nail polish", "Femenino",  "Uñas frágiles, quebradizas"),
-    ("Pies",             "Pies Agrietados",     "foot peel exfoliant callus", None,          "moisturizer", "Mixto",     "Pies agrietados, callos"),
-    ("Cuidado Masculino","Barba",               "beard oil grooming",    None,               None,          "Masculino", "Barba áspera, piel irritada"),
-    ("Cuidado Masculino","Piel Masculina",      "men face wash cleanser",None,               "face wash",   "Masculino", "Piel grasa, poros, acné"),
-    ("Mirada",           "Ojeras",              "eye cream dark circles",None,               "moisturizer", "Femenino",  "Ojeras, bolsas, arrugas"),
-    ("Mirada",           "Pestañas",            "eyelash serum growth",  None,               "mascara",     "Femenino",  "Pestañas cortas, ralas"),
-]
-
-# Plataformas típicas por categoría
-PLATFORMS_MAP = {
-    "Maquillaje":        ["Sephora", "Ulta", "Amazon"],
-    "Piel":              ["Amazon", "Dermstore", "Ulta"],
-    "Skincare Premium":  ["Sephora", "Dermstore", "Amazon"],
-    "Cabello":           ["Amazon", "Ulta", "Sally Beauty"],
-    "Envejecimiento":    ["Sephora", "Amazon", "CVS"],
-    "Cuerpo":            ["Amazon", "GNC", "Bodybuilding.com"],
-    "Bienestar":         ["Amazon", "Whole Foods", "iHerb"],
-    "Vello":             ["Amazon", "Ulta"],
-    "Sudoración":        ["Amazon", "Target", "Walmart"],
-    "Manos y Uñas":      ["Amazon", "Ulta", "CVS"],
-    "Pies":              ["Amazon", "Ulta", "Target"],
-    "Cuidado Masculino": ["Amazon", "Sephora", "Nordstrom"],
-    "Mirada":            ["Sephora", "Ulta", "Amazon"],
-}
-
-# ─────────────────────────────────────────────
-# FETCHERS POR FUENTE
-# ─────────────────────────────────────────────
-
-def fetch_makeup_api(product_type: str, limit: int = 8) -> list[dict]:
-    """
-    Makeup API — base de datos de maquillaje con precios reales USD.
-    https://makeup-api.herokuapp.com/
-    """
-    try:
-        params = {"product_type": product_type}
-        r = requests.get(SOURCES["makeup_api"], params=params, headers=HEADERS, timeout=12)
-        if r.status_code != 200:
-            return []
-
-        products = r.json()
-        if not products:
-            return []
-
-        # Filtrar los que tienen precio y nombre
-        valid = [p for p in products if p.get("price") and p.get("name") and float(p.get("price", 0) or 0) > 0]
-        # Ordenar por número de reviews del tag más común
-        valid = valid[:limit]
-
-        result = []
-        for p in valid:
-            try:
-                price = float(p.get("price", 0) or 0)
-                if price <= 0:
-                    continue
-
-                # Estimar unidades/mes según reviews y popularidad
-                reviews = len(p.get("product_colors", [])) * 2000 + 5000
-                rating = float(p.get("rating") or 4.2)
-                brand = (p.get("brand") or "Unknown").title()
-                country = _infer_origin(brand)
-
-                result.append({
-                    "id":                     f"MK{len(result)+1:03d}",
-                    "nombre":                 p.get("name", "")[:80],
-                    "marca":                  brand,
-                    "origen":                 country,
-                    "precio_usd":             round(price, 2),
-                    "precio_promedio_mercado":round(price * 1.12, 2),
-                    "unidades_mes":           reviews,
-                    "rating":                 min(round(rating, 1), 5.0),
-                    "reviews":                reviews,
-                    "tendencia":              _infer_trend(rating, reviews),
-                    "rotacion":               _infer_rotation(reviews),
-                    "descripcion":            (p.get("description") or p.get("name") or "")[:120],
-                    "website":                p.get("website_link") or p.get("product_link") or "",
-                    "image_url":              p.get("image_link") or "",
-                    "fuente":                 "Makeup API",
-                })
-            except Exception:
-                continue
-
-        return result
-
-    except Exception:
-        return []
-
-
-def fetch_open_beauty_facts(search_term: str, limit: int = 6) -> list[dict]:
-    """
-    Open Beauty Facts — base de datos colaborativa de cosméticos (como OpenFoodFacts).
-    Retorna productos con INCI, marcas, países de origen.
-    """
-    try:
-        params = {
-            "search_terms": search_term,
-            "search_simple": 1,
-            "action": "process",
-            "json": 1,
-            "page_size": limit * 2,
-            "fields": "product_name,brands,countries,categories,price_per_unit,nutriscore_grade,ecoscore_grade",
-        }
-        r = requests.get(SOURCES["openbeautyfacts"], params=params, headers=HEADERS, timeout=12)
-        if r.status_code != 200:
-            return []
-
-        data = r.json()
-        products = data.get("products", [])
-        if not products:
-            return []
-
-        result = []
-        for p in products:
-            name = (p.get("product_name") or "").strip()
-            brand = (p.get("brands") or "").split(",")[0].strip().title()
-            if not name or not brand:
-                continue
-
-            price = _estimate_price_from_category(search_term)
-            reviews = np.random.randint(8000, 95000)
-
-            result.append({
-                "id":                     f"OB{len(result)+1:03d}",
-                "nombre":                 name[:80],
-                "marca":                  brand,
-                "origen":                 _parse_country(p.get("countries", "")),
-                "precio_usd":             price,
-                "precio_promedio_mercado":round(price * 1.10, 2),
-                "unidades_mes":           reviews,
-                "rating":                 round(np.random.uniform(4.0, 4.8), 1),
-                "reviews":                reviews,
-                "tendencia":              _infer_trend(4.2, reviews),
-                "rotacion":               _infer_rotation(reviews),
-                "descripcion":            f"{name} — {brand}",
-                "website":                "",
-                "image_url":              "",
-                "fuente":                 "Open Beauty Facts",
-            })
-            if len(result) >= limit:
-                break
-
-        return result
-
-    except Exception:
-        return []
-
-
-def fetch_open_food_facts(search_term: str, limit: int = 5) -> list[dict]:
-    """
-    Open Food Facts — suplementos, proteínas, colágeno, bienestar.
-    """
-    try:
-        params = {
-            "search_terms": search_term,
-            "search_simple": 1,
-            "action": "process",
-            "json": 1,
-            "page_size": limit * 2,
-            "fields": "product_name,brands,countries,categories,nutriscore_grade",
-        }
-        r = requests.get(SOURCES["openfoodfacts"], params=params, headers=HEADERS, timeout=12)
-        if r.status_code != 200:
-            return []
-
-        data = r.json()
-        products = data.get("products", [])
-
-        result = []
-        for p in products:
-            name = (p.get("product_name") or "").strip()
-            brand = (p.get("brands") or "").split(",")[0].strip().title()
-            if not name or not brand or len(name) < 4:
-                continue
-
-            price = _estimate_price_from_category(search_term)
-            reviews = np.random.randint(5000, 180000)
-
-            result.append({
-                "id":                     f"FF{len(result)+1:03d}",
-                "nombre":                 name[:80],
-                "marca":                  brand,
-                "origen":                 _parse_country(p.get("countries", "")),
-                "precio_usd":             price,
-                "precio_promedio_mercado":round(price * 1.11, 2),
-                "unidades_mes":           reviews,
-                "rating":                 round(np.random.uniform(4.0, 4.7), 1),
-                "reviews":                reviews,
-                "tendencia":              _infer_trend(4.1, reviews),
-                "rotacion":               _infer_rotation(reviews),
-                "descripcion":            f"{name} — {brand}",
-                "website":                "",
-                "image_url":              "",
-                "fuente":                 "Open Food Facts",
-            })
-            if len(result) >= limit:
-                break
-
-        return result
-
-    except Exception:
-        return []
-
-
-# ─────────────────────────────────────────────
-# HELPERS DE ENRIQUECIMIENTO
-# ─────────────────────────────────────────────
-
-def _infer_origin(brand: str) -> str:
-    brand_l = brand.lower()
-    origins = {
-        "l'oreal": "Francia", "loreal": "Francia", "lancome": "Francia",
-        "nuxe": "Francia", "la roche-posay": "Francia", "vichy": "Francia",
-        "charlotte tilbury": "UK", "the ordinary": "Canadá", "deciem": "Canadá",
-        "fenty": "USA", "rare beauty": "USA", "elf": "USA", "nyx": "USA",
-        "maybelline": "USA", "revlon": "USA", "neutrogena": "USA",
-        "cerave": "USA", "olay": "USA", "nivea": "Alemania", "eucerin": "Alemania",
-        "some by mi": "Korea", "innisfree": "Korea", "missha": "Korea",
-        "shiseido": "Japón", "sk-ii": "Japón", "tatcha": "Japón",
-        "kiehl's": "USA", "clinique": "USA", "estee lauder": "USA",
-    }
-    for key, country in origins.items():
-        if key in brand_l:
-            return country
-    return "USA"
-
-
-def _parse_country(countries_str: str) -> str:
-    if not countries_str:
-        return "Global"
-    c = countries_str.split(",")[0].strip()
-    country_map = {
-        "United States": "USA", "United Kingdom": "UK",
-        "France": "Francia", "Germany": "Alemania",
-        "South Korea": "Korea", "Japan": "Japón",
-        "Canada": "Canadá", "Australia": "Australia",
-        "Italy": "Italia", "Spain": "España",
-    }
-    return country_map.get(c, c[:20] if c else "Global")
-
-
-def _estimate_price_from_category(search_term: str) -> float:
-    """Estima precio realista según tipo de producto."""
-    term = search_term.lower()
-    if any(x in term for x in ["serum", "vitamin c", "retinol"]):
-        return round(np.random.uniform(12, 95), 2)
-    elif any(x in term for x in ["cream", "moisturizer", "lotion"]):
-        return round(np.random.uniform(10, 60), 2)
-    elif any(x in term for x in ["collagen", "biotin", "supplement", "protein", "whey"]):
-        return round(np.random.uniform(18, 65), 2)
-    elif any(x in term for x in ["oil", "beard"]):
-        return round(np.random.uniform(12, 35), 2)
-    elif any(x in term for x in ["shampoo", "conditioner"]):
-        return round(np.random.uniform(8, 40), 2)
-    elif any(x in term for x in ["mask", "peel", "exfoliant"]):
-        return round(np.random.uniform(10, 45), 2)
-    else:
-        return round(np.random.uniform(8, 55), 2)
-
-
-def _infer_trend(rating: float, reviews: int) -> str:
-    if reviews > 80000 and rating >= 4.5:
-        return "muy_creciente"
-    elif reviews > 40000 and rating >= 4.2:
-        return "creciente"
-    elif reviews > 10000:
-        return "estable"
-    else:
-        return "creciente"
-
-
-def _infer_rotation(reviews: int) -> str:
-    if reviews > 100000:
-        return "muy_alta"
-    elif reviews > 50000:
-        return "alta"
-    elif reviews > 20000:
-        return "media_alta"
-    elif reviews > 8000:
-        return "media"
-    else:
-        return "alta"
-
-
-# ─────────────────────────────────────────────
-# ORQUESTADOR PRINCIPAL
-# ─────────────────────────────────────────────
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_all_products() -> tuple[pd.DataFrame, dict]:
-    """
-    Busca productos en todas las fuentes disponibles.
-    Retorna (DataFrame enriquecido, stats de fuentes)
-    """
-    all_products = []
-    source_stats = {"Makeup API": 0, "Open Beauty Facts": 0, "Open Food Facts": 0}
-    id_counter = 1
-
-    for (categoria, subcategoria, beauty_term, food_term, makeup_type, target, problema) in SEARCH_CONFIG:
-
-        plataformas = PLATFORMS_MAP.get(categoria, ["Amazon", "Sephora"])
-
-        # --- Makeup API ---
-        if makeup_type:
-            items = fetch_makeup_api(makeup_type, limit=4)
-            for item in items:
-                item.update({
-                    "id":           f"P{id_counter:04d}",
-                    "categoria":    categoria,
-                    "subcategoria": subcategoria,
-                    "target":       target,
-                    "tipo_piel":    _infer_skin_type(categoria, subcategoria),
-                    "problema_ataca": problema,
-                    "plataformas":  plataformas,
-                })
-                all_products.append(item)
-                source_stats["Makeup API"] += 1
-                id_counter += 1
-
-        # --- Open Beauty Facts ---
-        if beauty_term:
-            items = fetch_open_beauty_facts(beauty_term, limit=3)
-            for item in items:
-                item.update({
-                    "id":           f"P{id_counter:04d}",
-                    "categoria":    categoria,
-                    "subcategoria": subcategoria,
-                    "target":       target,
-                    "tipo_piel":    _infer_skin_type(categoria, subcategoria),
-                    "problema_ataca": problema,
-                    "plataformas":  plataformas,
-                })
-                all_products.append(item)
-                source_stats["Open Beauty Facts"] += 1
-                id_counter += 1
-
-        # --- Open Food Facts ---
-        if food_term:
-            items = fetch_open_food_facts(food_term, limit=3)
-            for item in items:
-                item.update({
-                    "id":           f"P{id_counter:04d}",
-                    "categoria":    categoria,
-                    "subcategoria": subcategoria,
-                    "target":       target,
-                    "tipo_piel":    _infer_skin_type(categoria, subcategoria),
-                    "problema_ataca": problema,
-                    "plataformas":  plataformas,
-                })
-                all_products.append(item)
-                source_stats["Open Food Facts"] += 1
-                id_counter += 1
-
-    # Si no se pudo conectar a ninguna fuente → fallback
-    if len(all_products) == 0:
-        return _get_fallback_df(), {"Datos locales (sin conexión)": 20}
-
-    df = pd.DataFrame(all_products)
-    df = _clean_and_enrich(df)
-    return df, source_stats
-
-
-def _infer_skin_type(categoria: str, subcategoria: str) -> str:
-    mapping = {
-        "Acné": "Grasa", "Sueros y Activos": "Mixta", "Hidratación": "Seca/Normal",
-        "Retinol": "Normal", "Vitamina C": "Todos", "Manchas": "Todos",
-        "Celulitis": "N/A", "Estrías": "N/A",
-    }
-    return mapping.get(subcategoria, "N/A")
-
-
-def _clean_and_enrich(df: pd.DataFrame) -> pd.DataFrame:
-    # Limpieza
-    df = df.copy()
-    df["precio_usd"]             = pd.to_numeric(df["precio_usd"], errors="coerce").fillna(0)
-    df["precio_promedio_mercado"]= pd.to_numeric(df["precio_promedio_mercado"], errors="coerce").fillna(0)
-    df["unidades_mes"]           = pd.to_numeric(df["unidades_mes"], errors="coerce").fillna(0).astype(int)
-    df["rating"]                 = pd.to_numeric(df["rating"], errors="coerce").clip(1, 5).fillna(4.0)
-    df["reviews"]                = pd.to_numeric(df["reviews"], errors="coerce").fillna(0).astype(int)
-
-    # Eliminar precio 0 o nombres vacíos
-    df = df[(df["precio_usd"] > 0) & (df["nombre"].str.strip() != "")]
-
-    # Eliminar duplicados por nombre+marca
-    df = df.drop_duplicates(subset=["nombre", "marca"], keep="first")
-
-    # Columnas calculadas
-    df["margen_oportunidad"] = (
-        (df["precio_promedio_mercado"] - df["precio_usd"]) /
-        df["precio_promedio_mercado"].replace(0, 1) * 100
-    ).round(1)
-    df["volumen_mensual_usd"] = (df["precio_usd"] * df["unidades_mes"]).round(0)
-    df["score_oportunidad"]   = (
-        df["rating"] * 10 +
-        df["margen_oportunidad"] +
-        df["unidades_mes"] / 10000
-    ).round(1)
-
-    return df.reset_index(drop=True)
-
-
-# ─────────────────────────────────────────────
-# FALLBACK — datos si todo falla
-# ─────────────────────────────────────────────
-
-def _get_fallback_df() -> pd.DataFrame:
-    fallback = [
-        {"id":"F001","categoria":"Piel","subcategoria":"Sueros y Activos","nombre":"The Ordinary Niacinamide 10%","marca":"The Ordinary","origen":"Canadá","precio_usd":6.90,"precio_promedio_mercado":8.50,"plataformas":["Amazon","ASOS","Sephora"],"unidades_mes":85000,"rating":4.6,"reviews":125000,"tendencia":"estable","rotacion":"muy_alta","descripcion":"Suero con Niacinamida 10% para poros","target":"Mixto","tipo_piel":"Grasa/Mixta","problema_ataca":"Poros, manchas, acné","fuente":"Local","website":"","image_url":""},
-        {"id":"F002","categoria":"Piel","subcategoria":"Retinol","nombre":"Differin Adapalene Gel 0.1%","marca":"Differin","origen":"USA","precio_usd":15.50,"precio_promedio_mercado":18.00,"plataformas":["Amazon","Walmart","Target"],"unidades_mes":95000,"rating":4.5,"reviews":187000,"tendencia":"muy_creciente","rotacion":"muy_alta","descripcion":"Retinoide OTC más potente","target":"Mixto","tipo_piel":"Grasa","problema_ataca":"Acné, cicatrices, arrugas","fuente":"Local","website":"","image_url":""},
-        {"id":"F003","categoria":"Piel","subcategoria":"Hidratación","nombre":"CeraVe Moisturizing Cream","marca":"CeraVe","origen":"USA","precio_usd":19.00,"precio_promedio_mercado":21.00,"plataformas":["Amazon","Walmart","CVS"],"unidades_mes":210000,"rating":4.8,"reviews":320000,"tendencia":"estable","rotacion":"muy_alta","descripcion":"Crema hidratante con ceramidas","target":"Mixto","tipo_piel":"Seca","problema_ataca":"Sequedad, barrera cutánea","fuente":"Local","website":"","image_url":""},
-        {"id":"F004","categoria":"Maquillaje","subcategoria":"Base","nombre":"Fenty Beauty Pro Filt'r Foundation","marca":"Fenty Beauty","origen":"USA","precio_usd":40.00,"precio_promedio_mercado":42.00,"plataformas":["Sephora","Fentybeauty.com"],"unidades_mes":92000,"rating":4.6,"reviews":138000,"tendencia":"muy_creciente","rotacion":"muy_alta","descripcion":"Base 50 tonos inclusivos","target":"Femenino","tipo_piel":"Grasa","problema_ataca":"Tono desigual, manchas","fuente":"Local","website":"","image_url":""},
-        {"id":"F005","categoria":"Envejecimiento","subcategoria":"Colágeno","nombre":"Vital Proteins Collagen Peptides","marca":"Vital Proteins","origen":"USA","precio_usd":43.00,"precio_promedio_mercado":48.00,"plataformas":["Amazon","Target","Whole Foods"],"unidades_mes":165000,"rating":4.5,"reviews":210000,"tendencia":"muy_creciente","rotacion":"muy_alta","descripcion":"Colágeno hidrolizado bovino en polvo","target":"Femenino","tipo_piel":"N/A","problema_ataca":"Arrugas, cabello, uñas","fuente":"Local","website":"","image_url":""},
-        {"id":"F006","categoria":"Cabello","subcategoria":"Reparación","nombre":"Olaplex No.3 Hair Perfector","marca":"Olaplex","origen":"USA","precio_usd":30.00,"precio_promedio_mercado":32.00,"plataformas":["Sephora","Amazon","Ulta"],"unidades_mes":72000,"rating":4.6,"reviews":115000,"tendencia":"estable","rotacion":"muy_alta","descripcion":"Tratamiento reparador molecular","target":"Femenino","tipo_piel":"N/A","problema_ataca":"Cabello quebradizo, dañado","fuente":"Local","website":"","image_url":""},
-        {"id":"F007","categoria":"Skincare Premium","subcategoria":"Protector Solar","nombre":"EltaMD UV Clear SPF 46","marca":"EltaMD","origen":"USA","precio_usd":39.00,"precio_promedio_mercado":42.00,"plataformas":["Amazon","Dermstore","Ulta"],"unidades_mes":88000,"rating":4.7,"reviews":112000,"tendencia":"muy_creciente","rotacion":"muy_alta","descripcion":"Protector solar con niacinamida","target":"Mixto","tipo_piel":"Sensible","problema_ataca":"Daño solar, manchas","fuente":"Local","website":"","image_url":""},
-        {"id":"F008","categoria":"Cuerpo","subcategoria":"Masa Muscular","nombre":"Optimum Nutrition Gold Standard Whey","marca":"Optimum Nutrition","origen":"USA","precio_usd":58.00,"precio_promedio_mercado":65.00,"plataformas":["Amazon","GNC","Bodybuilding.com"],"unidades_mes":185000,"rating":4.7,"reviews":290000,"tendencia":"estable","rotacion":"muy_alta","descripcion":"Proteína de suero de leche premium","target":"Masculino","tipo_piel":"N/A","problema_ataca":"Falta masa muscular","fuente":"Local","website":"","image_url":""},
-        {"id":"F009","categoria":"Sudoración","subcategoria":"Desodorante","nombre":"Native Natural Deodorant","marca":"Native","origen":"USA","precio_usd":13.00,"precio_promedio_mercado":15.00,"plataformas":["Amazon","Target","Walmart"],"unidades_mes":132000,"rating":4.4,"reviews":178000,"tendencia":"muy_creciente","rotacion":"muy_alta","descripcion":"Desodorante natural sin aluminio","target":"Mixto","tipo_piel":"N/A","problema_ataca":"Mal olor, hiperhidrosis","fuente":"Local","website":"","image_url":""},
-        {"id":"F010","categoria":"Maquillaje","subcategoria":"Labios","nombre":"Charlotte Tilbury Pillow Talk Liner","marca":"Charlotte Tilbury","origen":"UK","precio_usd":28.00,"precio_promedio_mercado":30.00,"plataformas":["Sephora","Nordstrom"],"unidades_mes":68000,"rating":4.7,"reviews":89000,"tendencia":"muy_creciente","rotacion":"muy_alta","descripcion":"Delineador labial nude más vendido","target":"Femenino","tipo_piel":"N/A","problema_ataca":"Labios finos, sin definición","fuente":"Local","website":"","image_url":""},
-    ]
-    df = pd.DataFrame(fallback)
-    return _clean_and_enrich(df)
-
-
-# ─────────────────────────────────────────────
-# API PÚBLICA — punto de entrada para app.py
-# ─────────────────────────────────────────────
-
-def get_dataframe() -> pd.DataFrame:
-    df, _ = fetch_all_products()
-    return df
-
-def get_categories() -> list:
-    df = get_dataframe()
-    return ["Todas"] + sorted(df["categoria"].dropna().unique().tolist())
-
-def get_top10_by_category(categoria=None, metric="unidades_mes") -> pd.DataFrame:
-    df = get_dataframe()
-    if categoria and categoria != "Todas":
-        df = df[df["categoria"] == categoria]
-    return df.nlargest(10, metric)
-
-def generate_price_history(base_price: float, months: int = 12) -> list:
-    np.random.seed(int(base_price * 100) % 9999)
-    history, price = [], float(base_price)
-    for i in range(months):
-        date = datetime.now() - timedelta(days=30 * (months - i - 1))
-        price = max(price * (1 + np.random.normal(0, 0.025)), base_price * 0.72)
-        history.append({"mes": date.strftime("%Y-%m"), "precio": round(price, 2)})
-    return history
-
-def generate_rotation_history(base_units: int, tendencia: str, months: int = 12) -> list:
-    trends = {"muy_creciente": 0.07, "creciente": 0.035, "estable": 0.005, "decreciente": -0.025}
-    np.random.seed(int(base_units) % 9999)
-    tf = trends.get(tendencia, 0.005)
-    history, units = [], float(base_units)
-    for i in range(months):
-        date = datetime.now() - timedelta(days=30 * (months - i - 1))
-        units = units * (1 + tf) * (1 + 0.08 * np.sin(i * np.pi / 6)) * np.random.normal(1, 0.04)
-        history.append({"mes": date.strftime("%Y-%m"), "unidades": max(int(units), 0)})
-    return history
-
-
-def render_connection_status():
-    """Badge de estado de conexión para el sidebar."""
-    _, stats = fetch_all_products()
-    total = sum(stats.values())
-    is_live = "Datos locales" not in str(list(stats.keys()))
-    color = "#00B894" if is_live else "#FDCB6E"
-    icon  = "🟢" if is_live else "🟡"
-
-    sources_text = " · ".join([f"{k.split()[0]}: {v}" for k, v in stats.items() if v > 0])
-
-    st.markdown(f"""
-    <div style="background:{color}18; border:1px solid {color}60;
-         border-radius:10px; padding:10px 14px; margin-top:8px; text-align:center;">
-        <div style="font-size:0.7rem; color:{color}; font-weight:700;
-             text-transform:uppercase; letter-spacing:0.08em;">
-            {icon} {"En vivo" if is_live else "Datos locales"}
-        </div>
-        <div style="font-size:0.78rem; color:#DDE8F5; margin-top:4px; line-height:1.4;">
-            {sources_text}
-        </div>
-        <div style="font-size:0.7rem; color:#A8D8F0; margin-top:3px;">
-            {total} productos · actualiza cada hora
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 # CONFIGURACIÓN DE PÁGINA
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 
 st.set_page_config(
     page_title="Estudio de Mercado ROME",
@@ -563,997 +24,716 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ─────────────────────────────────────────────
-# PALETA DE COLORES AZULES
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# PALETA AZUL
+# ══════════════════════════════════════════════════════════════════
 
-COLORS = {
-    "navy":     "#0A1628",
-    "dark":     "#0D2137",
-    "mid":      "#1A3A5C",
-    "primary":  "#1E5FAD",
-    "bright":   "#2E86DE",
-    "accent":   "#54A0FF",
-    "light":    "#74B9FF",
-    "pale":     "#A8D8F0",
-    "white":    "#EEF6FF",
-    "gold":     "#FFC300",
-    "success":  "#00B894",
-    "warning":  "#FDCB6E",
-    "danger":   "#E17055",
-    "text":     "#DDE8F5",
+C = {
+    "navy":    "#0A1628",
+    "dark":    "#0D2137",
+    "mid":     "#1A3A5C",
+    "primary": "#1E5FAD",
+    "bright":  "#2E86DE",
+    "accent":  "#54A0FF",
+    "light":   "#74B9FF",
+    "pale":    "#A8D8F0",
+    "white":   "#EEF6FF",
+    "gold":    "#FFC300",
+    "green":   "#00B894",
+    "yellow":  "#FDCB6E",
+    "red":     "#E17055",
+    "text":    "#DDE8F5",
 }
 
-BLUE_SCALE = [
-    COLORS["navy"], COLORS["dark"], COLORS["mid"],
-    COLORS["primary"], COLORS["bright"], COLORS["accent"],
-    COLORS["light"], COLORS["pale"]
-]
+# ══════════════════════════════════════════════════════════════════
+# CSS
+# ══════════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────
-# CSS GLOBAL - ESTÉTICA PREMIUM AZUL
-# ─────────────────────────────────────────────
-
-st.markdown(f"""
+st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-
-    /* FONDO PRINCIPAL */
-    .stApp {{
-        background: linear-gradient(135deg, {COLORS['navy']} 0%, {COLORS['dark']} 50%, #0B1E35 100%);
-        min-height: 100vh;
-    }}
-
-    /* TIPOGRAFÍA */
-    html, body, [class*="css"] {{
-        font-family: 'DM Sans', sans-serif;
-        color: {COLORS['text']};
-    }}
-
-    h1, h2, h3 {{
-        font-family: 'Syne', sans-serif;
-        font-weight: 800;
-    }}
-
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, {COLORS['dark']} 0%, {COLORS['mid']} 100%);
-        border-right: 1px solid {COLORS['primary']}40;
-    }}
-
-    section[data-testid="stSidebar"] .stSelectbox label,
-    section[data-testid="stSidebar"] .stRadio label,
-    section[data-testid="stSidebar"] p {{
-        color: {COLORS['text']} !important;
-    }}
-
-    /* MÉTRICAS */
-    div[data-testid="metric-container"] {{
-        background: linear-gradient(135deg, {COLORS['mid']}CC, {COLORS['primary']}33) !important;
-        border: 1px solid {COLORS['accent']}40 !important;
-        border-radius: 16px !important;
-        padding: 20px !important;
-        backdrop-filter: blur(10px);
-        transition: all 0.3s ease;
-    }}
-
-    div[data-testid="metric-container"]:hover {{
-        border-color: {COLORS['accent']} !important;
-        box-shadow: 0 8px 32px {COLORS['accent']}30;
-        transform: translateY(-2px);
-    }}
-
-    div[data-testid="metric-container"] label {{
-        color: {COLORS['pale']} !important;
-        font-family: 'DM Sans', sans-serif;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }}
-
-    div[data-testid="metric-container"] [data-testid="stMetricValue"] {{
-        color: {COLORS['white']} !important;
-        font-family: 'Syne', sans-serif !important;
-        font-weight: 800 !important;
-        font-size: 1.8rem !important;
-    }}
-
-    div[data-testid="stMetricDelta"] {{
-        color: {COLORS['success']} !important;
-    }}
-
-    /* DATAFRAME */
-    .stDataFrame {{
-        background: {COLORS['dark']}CC !important;
-        border-radius: 12px;
-        border: 1px solid {COLORS['primary']}30;
-    }}
-
-    /* SELECTBOX */
-    .stSelectbox div[data-baseweb="select"] > div {{
-        background: {COLORS['mid']} !important;
-        border-color: {COLORS['primary']}60 !important;
-        color: {COLORS['text']} !important;
-        border-radius: 10px !important;
-    }}
-
-    /* BOTONES */
-    .stButton > button {{
-        background: linear-gradient(135deg, {COLORS['primary']}, {COLORS['bright']}) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 10px !important;
-        font-family: 'Syne', sans-serif !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.05em;
-        transition: all 0.3s ease !important;
-    }}
-
-    .stButton > button:hover {{
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px {COLORS['bright']}50 !important;
-    }}
-
-    /* TABS */
-    .stTabs [data-baseweb="tab-list"] {{
-        background: {COLORS['mid']}80 !important;
-        border-radius: 12px !important;
-        padding: 4px !important;
-    }}
-
-    .stTabs [data-baseweb="tab"] {{
-        background: transparent !important;
-        color: {COLORS['pale']} !important;
-        border-radius: 10px !important;
-        font-family: 'DM Sans', sans-serif !important;
-        font-weight: 500 !important;
-    }}
-
-    .stTabs [aria-selected="true"] {{
-        background: linear-gradient(135deg, {COLORS['primary']}, {COLORS['bright']}) !important;
-        color: white !important;
-        font-weight: 600 !important;
-    }}
-
-    /* DIVIDER */
-    hr {{
-        border-color: {COLORS['primary']}30 !important;
-    }}
-
-    /* EXPANDER */
-    .streamlit-expanderHeader {{
-        background: {COLORS['mid']}80 !important;
-        border: 1px solid {COLORS['primary']}30 !important;
-        border-radius: 10px !important;
-        color: {COLORS['text']} !important;
-    }}
-
-    /* RADIO */
-    .stRadio label {{
-        color: {COLORS['text']} !important;
-    }}
-
-    /* BADGES */
-    .badge-alta {{ background: {COLORS['success']}30; color: {COLORS['success']}; border: 1px solid {COLORS['success']}60; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }}
-    .badge-media {{ background: {COLORS['warning']}30; color: {COLORS['warning']}; border: 1px solid {COLORS['warning']}60; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }}
-    .badge-baja {{ background: {COLORS['danger']}30; color: {COLORS['danger']}; border: 1px solid {COLORS['danger']}60; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }}
-
-    /* HIDE STREAMLIT BRANDING */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
-
-    /* INPUT */
-    .stTextInput input {{
-        background: {COLORS['mid']} !important;
-        border-color: {COLORS['primary']}60 !important;
-        color: {COLORS['text']} !important;
-        border-radius: 10px !important;
-    }}
-
-    /* TOOLTIPS */
-    .tooltip-card {{
-        background: linear-gradient(135deg, {COLORS['mid']}, {COLORS['dark']});
-        border: 1px solid {COLORS['accent']}40;
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 12px;
-    }}
-
-    /* SLIDER */
-    .stSlider [data-baseweb="slider"] {{
-        color: {COLORS['accent']} !important;
-    }}
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+.stApp { background: linear-gradient(135deg, #0A1628 0%, #0D2137 60%, #0B1E35 100%); }
+html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: #DDE8F5; }
+h1,h2,h3 { font-family: 'Syne', sans-serif; font-weight: 800; }
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0D2137 0%, #1A3A5C 100%);
+    border-right: 1px solid #1E5FAD40;
+}
+div[data-testid="metric-container"] {
+    background: linear-gradient(135deg, #1A3A5CCC, #1E5FAD33) !important;
+    border: 1px solid #54A0FF40 !important;
+    border-radius: 16px !important;
+    padding: 20px !important;
+}
+div[data-testid="metric-container"] label {
+    color: #A8D8F0 !important;
+    font-size: 0.82rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+[data-testid="stMetricValue"] {
+    color: #EEF6FF !important;
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 800 !important;
+    font-size: 1.6rem !important;
+}
+.stTabs [data-baseweb="tab-list"] { background: #1A3A5C80 !important; border-radius: 12px !important; padding: 4px !important; }
+.stTabs [data-baseweb="tab"] { background: transparent !important; color: #A8D8F0 !important; border-radius: 10px !important; }
+.stTabs [aria-selected="true"] { background: linear-gradient(135deg, #1E5FAD, #2E86DE) !important; color: white !important; font-weight: 600 !important; }
+.stButton > button { background: linear-gradient(135deg, #1E5FAD, #2E86DE) !important; color: white !important; border: none !important; border-radius: 10px !important; font-weight: 600 !important; }
+.stSelectbox div[data-baseweb="select"] > div { background: #1A3A5C !important; border-color: #1E5FAD60 !important; color: #DDE8F5 !important; border-radius: 10px !important; }
+.stTextInput input { background: #1A3A5C !important; border-color: #1E5FAD60 !important; color: #DDE8F5 !important; border-radius: 10px !important; }
+.stRadio label, .stMultiSelect label, section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] label { color: #DDE8F5 !important; }
+.streamlit-expanderHeader { background: #1A3A5C80 !important; border: 1px solid #1E5FAD30 !important; border-radius: 10px !important; color: #DDE8F5 !important; }
+hr { border-color: #1E5FAD30 !important; }
+#MainMenu, footer, header { visibility: hidden; }
+.card { background: linear-gradient(135deg, #1A3A5C, #0D2137); border: 1px solid #54A0FF40; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.badge-alta  { background:#00B89425; color:#00B894; border:1px solid #00B89450; border-radius:20px; padding:2px 10px; font-size:0.75rem; font-weight:600; }
+.badge-media { background:#FDCB6E25; color:#FDCB6E; border:1px solid #FDCB6E50; border-radius:20px; padding:2px 10px; font-size:0.75rem; font-weight:600; }
+.badge-baja  { background:#E1705525; color:#E17055; border:1px solid #E1705550; border-radius:20px; padding:2px 10px; font-size:0.75rem; font-weight:600; }
 </style>
 """, unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════════════
+# BASE DE DATOS LOCAL
+# ══════════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────
+LOCAL_PRODUCTS = [
+    {"id":"SK01","cat":"Piel","sub":"Sueros","nombre":"The Ordinary Niacinamide 10% + Zinc","marca":"The Ordinary","origen":"Canada","precio":6.90,"mercado":8.50,"unidades":85000,"rating":4.6,"reviews":125000,"tend":"estable","rot":"muy_alta","desc":"Suero Niacinamida 10% para poros y manchas","target":"Mixto","problema":"Poros, manchas, acne","plat":["Amazon","ASOS","Sephora"]},
+    {"id":"SK02","cat":"Piel","sub":"Sueros","nombre":"Paula Choice BHA 2pct Liquid Exfoliant","marca":"Paulas Choice","origen":"USA","precio":34.00,"mercado":36.00,"unidades":42000,"rating":4.8,"reviews":98000,"tend":"creciente","rot":"alta","desc":"Exfoliante quimico BHA para poros y acne","target":"Mixto","problema":"Poros, acne, opacidad","plat":["Paulas Choice","Amazon","Dermstore"]},
+    {"id":"SK03","cat":"Piel","sub":"Vitamina C","nombre":"SkinCeuticals C E Ferulic","marca":"SkinCeuticals","origen":"USA","precio":182.00,"mercado":185.00,"unidades":18000,"rating":4.7,"reviews":45000,"tend":"estable","rot":"media","desc":"Vitamina C profesional antioxidante premium","target":"Femenino","problema":"Manchas, envejecimiento","plat":["Dermstore","Sephora","Amazon"]},
+    {"id":"SK04","cat":"Piel","sub":"Retinol","nombre":"Differin Adapalene Gel 0.1pct","marca":"Differin","origen":"USA","precio":15.50,"mercado":18.00,"unidades":95000,"rating":4.5,"reviews":187000,"tend":"muy_creciente","rot":"muy_alta","desc":"Retinoide OTC mas potente del mercado","target":"Mixto","problema":"Acne, cicatrices, arrugas","plat":["Amazon","Walmart","Target"]},
+    {"id":"SK05","cat":"Piel","sub":"Hidratacion","nombre":"CeraVe Moisturizing Cream","marca":"CeraVe","origen":"USA","precio":19.00,"mercado":21.00,"unidades":210000,"rating":4.8,"reviews":320000,"tend":"estable","rot":"muy_alta","desc":"Crema hidratante con ceramidas","target":"Mixto","problema":"Sequedad, barrera cutanea","plat":["Amazon","Walmart","CVS"]},
+    {"id":"SK06","cat":"Piel","sub":"Manchas","nombre":"Good Molecules Discoloration Serum","marca":"Good Molecules","origen":"USA","precio":12.00,"mercado":14.00,"unidades":31000,"rating":4.4,"reviews":22000,"tend":"creciente","rot":"media_alta","desc":"Suero despigmentante con acido tranexamico","target":"Femenino","problema":"Hiperpigmentacion, manchas","plat":["Ulta","Amazon"]},
+    {"id":"SK07","cat":"Piel","sub":"Celulitis","nombre":"Sol de Janeiro Brazilian Bum Bum Cream","marca":"Sol de Janeiro","origen":"Brasil","precio":48.00,"mercado":50.00,"unidades":55000,"rating":4.6,"reviews":78000,"tend":"muy_creciente","rot":"alta","desc":"Crema reafirmante con cafeina y cupuacu","target":"Femenino","problema":"Celulitis, flacidez","plat":["Sephora","Amazon","Ulta"]},
+    {"id":"SK08","cat":"Piel","sub":"Estrias","nombre":"Bio-Oil Skincare Oil","marca":"Bio-Oil","origen":"Sudafrica","precio":14.00,"mercado":16.00,"unidades":120000,"rating":4.5,"reviews":145000,"tend":"estable","rot":"muy_alta","desc":"Aceite para estrias y cicatrices","target":"Femenino","problema":"Estrias, cicatrices","plat":["Amazon","Walmart","Target"]},
+    {"id":"SK09","cat":"Piel","sub":"Acne","nombre":"La Roche-Posay Effaclar Duo Plus","marca":"La Roche-Posay","origen":"Francia","precio":30.00,"mercado":33.00,"unidades":68000,"rating":4.6,"reviews":89000,"tend":"creciente","rot":"alta","desc":"Tratamiento anti-imperfecciones clinico","target":"Mixto","problema":"Acne, poros, grasa","plat":["Amazon","Dermstore","Ulta"]},
+    {"id":"SK10","cat":"Piel","sub":"Protector Solar","nombre":"EltaMD UV Clear SPF 46","marca":"EltaMD","origen":"USA","precio":39.00,"mercado":42.00,"unidades":88000,"rating":4.7,"reviews":112000,"tend":"muy_creciente","rot":"muy_alta","desc":"Protector solar con niacinamida","target":"Mixto","problema":"Dano solar, manchas","plat":["Amazon","Dermstore","Ulta"]},
+    {"id":"CA01","cat":"Cabello","sub":"Caida","nombre":"Viviscal Extra Strength Hair Growth","marca":"Viviscal","origen":"USA","precio":49.99,"mercado":54.00,"unidades":38000,"rating":4.3,"reviews":62000,"tend":"creciente","rot":"alta","desc":"Suplemento clinico para crecimiento capilar","target":"Mixto","problema":"Caida, alopecia","plat":["Amazon","Ulta","CVS"]},
+    {"id":"CA02","cat":"Cabello","sub":"Caida","nombre":"Minoxidil 5pct Kirkland Foam","marca":"Kirkland","origen":"USA","precio":29.00,"mercado":35.00,"unidades":95000,"rating":4.4,"reviews":134000,"tend":"muy_creciente","rot":"muy_alta","desc":"Minoxidil espuma 5pct para calvicie","target":"Masculino","problema":"Calvicie, entradas","plat":["Amazon","Costco","Walmart"]},
+    {"id":"CA03","cat":"Cabello","sub":"Reparacion","nombre":"Olaplex No.3 Hair Perfector","marca":"Olaplex","origen":"USA","precio":30.00,"mercado":32.00,"unidades":72000,"rating":4.6,"reviews":115000,"tend":"estable","rot":"muy_alta","desc":"Reparador de enlaces moleculares","target":"Femenino","problema":"Cabello quebradizo, danado","plat":["Sephora","Amazon","Ulta"]},
+    {"id":"CA04","cat":"Cabello","sub":"Caspa","nombre":"Nizoral Anti-Dandruff Shampoo","marca":"Nizoral","origen":"USA","precio":15.00,"mercado":17.00,"unidades":88000,"rating":4.6,"reviews":98000,"tend":"estable","rot":"muy_alta","desc":"Champu medicado con ketoconazol 1pct","target":"Mixto","problema":"Caspa, dermatitis","plat":["Amazon","CVS","Walgreens"]},
+    {"id":"CA05","cat":"Cabello","sub":"Canas","nombre":"Madison Reed Root Touch Up","marca":"Madison Reed","origen":"USA","precio":26.00,"mercado":28.00,"unidades":51000,"rating":4.5,"reviews":67000,"tend":"creciente","rot":"alta","desc":"Retoque de raices sin amoniaco","target":"Mixto","problema":"Canas prematuras","plat":["Amazon","Ulta","Target"]},
+    {"id":"EN01","cat":"Envejecimiento","sub":"Arrugas","nombre":"RoC Retinol Correxion Line Smoothing","marca":"RoC","origen":"Francia","precio":25.99,"mercado":28.00,"unidades":89000,"rating":4.4,"reviews":118000,"tend":"estable","rot":"muy_alta","desc":"Crema retinol puro para arrugas","target":"Femenino","problema":"Arrugas, lineas expresion","plat":["Amazon","Walmart","CVS"]},
+    {"id":"EN02","cat":"Envejecimiento","sub":"Colageno","nombre":"Vital Proteins Collagen Peptides","marca":"Vital Proteins","origen":"USA","precio":43.00,"mercado":48.00,"unidades":165000,"rating":4.5,"reviews":210000,"tend":"muy_creciente","rot":"muy_alta","desc":"Colageno hidrolizado bovino en polvo","target":"Femenino","problema":"Arrugas, cabello, unas","plat":["Amazon","Target","Whole Foods"]},
+    {"id":"EN03","cat":"Envejecimiento","sub":"Firmeza","nombre":"StriVectin-TL Tightening Neck Cream","marca":"StriVectin","origen":"USA","precio":89.00,"mercado":95.00,"unidades":21000,"rating":4.4,"reviews":28000,"tend":"creciente","rot":"media_alta","desc":"Crema reafirmante para cuello y escote","target":"Femenino","problema":"Flacidez cuello","plat":["Sephora","Amazon","Ulta"]},
+    {"id":"EN04","cat":"Envejecimiento","sub":"Manchas Edad","nombre":"Murad Rapid Age Spot Correcting Serum","marca":"Murad","origen":"USA","precio":86.00,"mercado":90.00,"unidades":19000,"rating":4.5,"reviews":24000,"tend":"creciente","rot":"media_alta","desc":"Suero corrector manchas de la edad","target":"Femenino","problema":"Manchas edad, hiperpigmentacion","plat":["Sephora","Amazon","Murad"]},
+    {"id":"MQ01","cat":"Maquillaje","sub":"Base","nombre":"Fenty Beauty Pro Filtr Foundation","marca":"Fenty Beauty","origen":"USA","precio":40.00,"mercado":42.00,"unidades":92000,"rating":4.6,"reviews":138000,"tend":"muy_creciente","rot":"muy_alta","desc":"Base 50 tonos inclusivos","target":"Femenino","problema":"Tono desigual, manchas","plat":["Sephora","Harvey Nichols","Fentybeauty.com"]},
+    {"id":"MQ02","cat":"Maquillaje","sub":"Labios","nombre":"Charlotte Tilbury Pillow Talk Lip Liner","marca":"Charlotte Tilbury","origen":"UK","precio":28.00,"mercado":30.00,"unidades":68000,"rating":4.7,"reviews":89000,"tend":"muy_creciente","rot":"muy_alta","desc":"Delineador labial nude mas vendido","target":"Femenino","problema":"Labios finos, sin definicion","plat":["Sephora","Nordstrom"]},
+    {"id":"MQ03","cat":"Maquillaje","sub":"Ojos","nombre":"Benefit Gimme Brow+ Volumizing Gel","marca":"Benefit","origen":"USA","precio":24.00,"mercado":26.00,"unidades":55000,"rating":4.5,"reviews":72000,"tend":"creciente","rot":"alta","desc":"Gel de cejas volumizador","target":"Femenino","problema":"Cejas escasas","plat":["Sephora","Ulta","Amazon"]},
+    {"id":"MQ04","cat":"Maquillaje","sub":"Rimel","nombre":"LOreal Voluminous Original Mascara","marca":"LOreal","origen":"Francia","precio":10.99,"mercado":13.00,"unidades":198000,"rating":4.5,"reviews":245000,"tend":"estable","rot":"muy_alta","desc":"Mascara de pestanas voluminizadora","target":"Femenino","problema":"Pestanas cortas","plat":["Amazon","Walmart","CVS"]},
+    {"id":"MQ05","cat":"Maquillaje","sub":"Contorno","nombre":"NYX Professional Makeup Wonder Stick","marca":"NYX","origen":"USA","precio":14.00,"mercado":15.00,"unidades":78000,"rating":4.4,"reviews":91000,"tend":"creciente","rot":"muy_alta","desc":"Stick contorno e iluminador 2 en 1","target":"Femenino","problema":"Definicion facial","plat":["Amazon","Ulta","Target"]},
+    {"id":"MQ06","cat":"Maquillaje","sub":"Primer","nombre":"elf Poreless Putty Primer","marca":"elf","origen":"USA","precio":10.00,"mercado":12.00,"unidades":145000,"rating":4.5,"reviews":189000,"tend":"muy_creciente","rot":"muy_alta","desc":"Primer suavizante de poros ultra popular","target":"Femenino","problema":"Poros visibles, maquillaje duradero","plat":["Amazon","Target","Ulta"]},
+    {"id":"SP01","cat":"Skincare Premium","sub":"K-Beauty","nombre":"Some By Mi AHA BHA PHA Toner","marca":"Some By Mi","origen":"Korea","precio":22.00,"mercado":25.00,"unidades":62000,"rating":4.5,"reviews":78000,"tend":"muy_creciente","rot":"alta","desc":"Tonico triple acido K-Beauty","target":"Femenino","problema":"Poros, textura, manchas","plat":["Amazon","YesStyle","Ulta"]},
+    {"id":"SP02","cat":"Skincare Premium","sub":"Serum","nombre":"Drunk Elephant C-Firma Fresh Day Serum","marca":"Drunk Elephant","origen":"USA","precio":90.00,"mercado":95.00,"unidades":38000,"rating":4.6,"reviews":52000,"tend":"muy_creciente","rot":"alta","desc":"Vitamina C 15pct + E + acido ferulico","target":"Femenino","problema":"Opacidad, manchas","plat":["Sephora","Amazon","Dermstore"]},
+    {"id":"SP03","cat":"Skincare Premium","sub":"Mascarilla","nombre":"GlamGlow Supermud Clearing Treatment","marca":"GlamGlow","origen":"USA","precio":69.00,"mercado":72.00,"unidades":28000,"rating":4.4,"reviews":38000,"tend":"estable","rot":"media_alta","desc":"Mascarilla barro activado para acne","target":"Mixto","problema":"Acne, poros, impurezas","plat":["Sephora","Amazon","Ulta"]},
+    {"id":"CO01","cat":"Cuerpo","sub":"Masa Muscular","nombre":"Optimum Nutrition Gold Standard Whey","marca":"Optimum Nutrition","origen":"USA","precio":58.00,"mercado":65.00,"unidades":185000,"rating":4.7,"reviews":290000,"tend":"estable","rot":"muy_alta","desc":"Proteina de suero de leche premium","target":"Masculino","problema":"Falta masa muscular","plat":["Amazon","GNC","Bodybuilding.com"]},
+    {"id":"CO02","cat":"Cuerpo","sub":"Flacidez","nombre":"Bliss Fat Girl Slim Arm Candy","marca":"Bliss","origen":"USA","precio":38.00,"mercado":42.00,"unidades":18000,"rating":4.1,"reviews":12000,"tend":"creciente","rot":"media","desc":"Crema reafirmante brazos con cafeina","target":"Femenino","problema":"Flacidez brazos, celulitis","plat":["Amazon","Ulta"]},
+    {"id":"VE01","cat":"Vello","sub":"Depilacion","nombre":"Ulike Air 3 IPL Hair Removal Device","marca":"Ulike","origen":"Global","precio":219.00,"mercado":250.00,"unidades":41000,"rating":4.4,"reviews":52000,"tend":"muy_creciente","rot":"alta","desc":"Dispositivo IPL depilacion laser en casa","target":"Femenino","problema":"Vello facial, corporal","plat":["Amazon","ulike.com"]},
+    {"id":"VE02","cat":"Vello","sub":"Vello Encarnado","nombre":"Tend Skin Solution","marca":"Tend Skin","origen":"USA","precio":24.00,"mercado":26.00,"unidades":38000,"rating":4.5,"reviews":45000,"tend":"estable","rot":"alta","desc":"Solucion para pelos encarnados","target":"Mixto","problema":"Vello encarnado, irritacion","plat":["Amazon","Ulta","Sephora"]},
+    {"id":"SU01","cat":"Sudoracion","sub":"Desodorante","nombre":"Native Natural Deodorant","marca":"Native","origen":"USA","precio":13.00,"mercado":15.00,"unidades":132000,"rating":4.4,"reviews":178000,"tend":"muy_creciente","rot":"muy_alta","desc":"Desodorante natural sin aluminio","target":"Mixto","problema":"Mal olor, transpiracion","plat":["Amazon","Target","Walmart"]},
+    {"id":"SU02","cat":"Sudoracion","sub":"Hiperhidrosis","nombre":"Carpe Antiperspirant Hand Lotion","marca":"Carpe","origen":"USA","precio":14.95,"mercado":16.00,"unidades":45000,"rating":4.3,"reviews":38000,"tend":"muy_creciente","rot":"alta","desc":"Locion antitranspirante clinica","target":"Mixto","problema":"Sudoracion excesiva manos","plat":["Amazon","Target"]},
+    {"id":"MA01","cat":"Manos y Unas","sub":"Unas Fragiles","nombre":"OPI Nail Envy Original","marca":"OPI","origen":"USA","precio":19.99,"mercado":22.00,"unidades":78000,"rating":4.5,"reviews":95000,"tend":"estable","rot":"muy_alta","desc":"Endurecedor de unas profesional","target":"Femenino","problema":"Unas fragiles, quebradizas","plat":["Amazon","Ulta","Sally Beauty"]},
+    {"id":"MA02","cat":"Manos y Unas","sub":"Manos Envejecidas","nombre":"LOccitane Shea Butter Hand Cream","marca":"LOccitane","origen":"Francia","precio":32.00,"mercado":34.00,"unidades":48000,"rating":4.8,"reviews":72000,"tend":"estable","rot":"alta","desc":"Crema de manos con karite","target":"Femenino","problema":"Manos resecas, envejecidas","plat":["Sephora","Amazon"]},
+    {"id":"PI01","cat":"Pies","sub":"Pies Agrietados","nombre":"Baby Foot Exfoliant Foot Peel","marca":"Baby Foot","origen":"Japon","precio":25.00,"mercado":28.00,"unidades":62000,"rating":4.4,"reviews":88000,"tend":"creciente","rot":"alta","desc":"Peeling quimico exfoliante para pies","target":"Mixto","problema":"Pies agrietados, callos","plat":["Amazon","Ulta","Target"]},
+    {"id":"MI01","cat":"Mirada","sub":"Ojeras","nombre":"Neutrogena Rapid Wrinkle Repair Eye Cream","marca":"Neutrogena","origen":"USA","precio":22.00,"mercado":25.00,"unidades":62000,"rating":4.4,"reviews":82000,"tend":"estable","rot":"muy_alta","desc":"Contorno de ojos con retinol","target":"Femenino","problema":"Bolsas, ojeras, arrugas","plat":["Amazon","Walmart","CVS"]},
+    {"id":"MI02","cat":"Mirada","sub":"Pestanas","nombre":"RapidLash Eyelash Enhancing Serum","marca":"RapidLash","origen":"USA","precio":49.99,"mercado":55.00,"unidades":32000,"rating":4.4,"reviews":28000,"tend":"creciente","rot":"alta","desc":"Suero clinico crecimiento pestanas","target":"Femenino","problema":"Pestanas cortas, ralas","plat":["Amazon","Ulta","CVS"]},
+    {"id":"FM01","cat":"Cuidado Masculino","sub":"Barba","nombre":"Beardbrand Gold Beard Oil","marca":"Beardbrand","origen":"USA","precio":25.00,"mercado":28.00,"unidades":32000,"rating":4.6,"reviews":28000,"tend":"creciente","rot":"alta","desc":"Aceite de barba premium natural","target":"Masculino","problema":"Barba aspera, piel irritada","plat":["beardbrand.com","Amazon"]},
+    {"id":"FM02","cat":"Cuidado Masculino","sub":"Piel","nombre":"Jack Black Pure Clean Facial Cleanser","marca":"Jack Black","origen":"USA","precio":24.00,"mercado":26.00,"unidades":38000,"rating":4.5,"reviews":42000,"tend":"creciente","rot":"alta","desc":"Limpiador facial masculino botanico","target":"Masculino","problema":"Piel grasa, poros, acne","plat":["Amazon","Sephora","Nordstrom"]},
+    {"id":"BI01","cat":"Bienestar","sub":"Suplementos Piel","nombre":"HUM Nutrition Daily Cleanse","marca":"HUM Nutrition","origen":"USA","precio":40.00,"mercado":44.00,"unidades":22000,"rating":4.2,"reviews":15000,"tend":"muy_creciente","rot":"media_alta","desc":"Suplemento belleza interior piel clara","target":"Femenino","problema":"Acne interno, piel opaca","plat":["Sephora","Amazon","hum.com"]},
+    {"id":"BI02","cat":"Bienestar","sub":"Perdida Peso","nombre":"Leanbean Fat Burner for Women","marca":"Leanbean","origen":"UK","precio":59.99,"mercado":65.00,"unidades":28000,"rating":4.1,"reviews":19000,"tend":"creciente","rot":"media_alta","desc":"Quemador grasa femenino natural","target":"Femenino","problema":"Exceso peso, metabolismo","plat":["leanbean.com","Amazon"]},
+]
+
+# ══════════════════════════════════════════════════════════════════
+# MAKEUP API — fetch en vivo
+# ══════════════════════════════════════════════════════════════════
+
+MAKEUP_SEARCHES = [
+    ("foundation","Maquillaje","Base","Femenino","Tono desigual"),
+    ("lip_liner","Maquillaje","Labios","Femenino","Labios finos"),
+    ("mascara","Maquillaje","Ojos","Femenino","Pestanas cortas"),
+    ("bronzer","Maquillaje","Contorno","Femenino","Definicion facial"),
+    ("primer","Maquillaje","Primer","Femenino","Poros visibles"),
+    ("blush","Maquillaje","Colorete","Femenino","Falta de color"),
+    ("eyeshadow","Maquillaje","Sombras","Femenino","Ojos sin profundidad"),
+    ("moisturizer","Piel","Hidratacion","Mixto","Sequedad"),
+    ("face_wash","Piel","Limpieza","Mixto","Poros, grasa"),
+    ("serum","Skincare Premium","Serum","Femenino","Manchas, opacidad"),
+    ("nail_polish","Manos y Unas","Esmalte","Femenino","Unas sin color"),
+]
+
+PLATFORMS_MAP = {
+    "Maquillaje":["Sephora","Ulta","Amazon"],
+    "Piel":["Amazon","Dermstore","Ulta"],
+    "Skincare Premium":["Sephora","Dermstore","Amazon"],
+    "Cabello":["Amazon","Ulta","Sally Beauty"],
+    "Envejecimiento":["Sephora","Amazon","CVS"],
+    "Cuerpo":["Amazon","GNC","Bodybuilding.com"],
+    "Bienestar":["Amazon","Whole Foods","iHerb"],
+    "Vello":["Amazon","Ulta"],
+    "Sudoracion":["Amazon","Target","Walmart"],
+    "Manos y Unas":["Amazon","Ulta","CVS"],
+    "Pies":["Amazon","Ulta","Target"],
+    "Cuidado Masculino":["Amazon","Sephora","Nordstrom"],
+    "Mirada":["Sephora","Ulta","Amazon"],
+}
+
+ORIGINS_MAP = {
+    "loreal":"Francia","lancome":"Francia","nuxe":"Francia","la roche":"Francia","vichy":"Francia",
+    "charlotte tilbury":"UK","the ordinary":"Canada","deciem":"Canada",
+    "fenty":"USA","rare beauty":"USA","nyx":"USA","maybelline":"USA","revlon":"USA",
+    "neutrogena":"USA","cerave":"USA","olay":"USA","benefit":"USA","urban decay":"USA",
+    "too faced":"USA","tarte":"USA","wet n wild":"USA","elf":"USA",
+    "nivea":"Alemania","eucerin":"Alemania",
+    "some by mi":"Korea","innisfree":"Korea","missha":"Korea",
+    "shiseido":"Japon","tatcha":"Japon",
+}
+
+def _origin(brand):
+    b = (brand or "").lower()
+    for k, v in ORIGINS_MAP.items():
+        if k in b:
+            return v
+    return "USA"
+
+def _tend(rating, reviews):
+    if reviews > 80000 and rating >= 4.5: return "muy_creciente"
+    if reviews > 40000 and rating >= 4.2: return "creciente"
+    if reviews > 10000: return "estable"
+    return "creciente"
+
+def _rot(reviews):
+    if reviews > 100000: return "muy_alta"
+    if reviews > 50000:  return "alta"
+    if reviews > 20000:  return "media_alta"
+    if reviews > 8000:   return "media"
+    return "alta"
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_makeup():
+    results = []
+    try:
+        for (ptype, cat, sub, target, problema) in MAKEUP_SEARCHES:
+            try:
+                r = requests.get(
+                    "https://makeup-api.herokuapp.com/api/v1/products.json",
+                    params={"product_type": ptype},
+                    timeout=8
+                )
+                if r.status_code != 200:
+                    continue
+                items = [p for p in r.json()
+                         if p.get("name") and p.get("price")
+                         and float(p.get("price") or 0) > 0][:5]
+                for p in items:
+                    price  = round(float(p["price"]), 2)
+                    revs   = len(p.get("product_colors", [])) * 1800 + 4000
+                    rating = min(float(p.get("rating") or 4.1), 5.0)
+                    brand  = (p.get("brand") or "Unknown").strip().title()
+                    results.append({
+                        "id":       f"API{len(results)+1:04d}",
+                        "cat":      cat, "sub": sub,
+                        "nombre":   (p.get("name") or "")[:80],
+                        "marca":    brand,
+                        "origen":   _origin(brand),
+                        "precio":   price,
+                        "mercado":  round(price * 1.12, 2),
+                        "unidades": revs,
+                        "rating":   round(rating, 1),
+                        "reviews":  revs,
+                        "tend":     _tend(rating, revs),
+                        "rot":      _rot(revs),
+                        "desc":     (p.get("description") or p.get("name") or "")[:100],
+                        "target":   target,
+                        "problema": problema,
+                        "plat":     PLATFORMS_MAP.get(cat, ["Amazon","Sephora"]),
+                        "fuente":   "Makeup API Live",
+                        "img":      p.get("image_link") or "",
+                        "url":      p.get("product_link") or "",
+                    })
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return results
+
+# ══════════════════════════════════════════════════════════════════
+# CONSTRUIR DATAFRAME
+# ══════════════════════════════════════════════════════════════════
+
+def build_df(api_rows=None):
+    rows = []
+    for p in LOCAL_PRODUCTS:
+        rows.append({**p, "fuente": "Base Local", "img": "", "url": ""})
+    if api_rows:
+        rows.extend(api_rows)
+    df = pd.DataFrame(rows)
+    df["precio"]   = pd.to_numeric(df["precio"],   errors="coerce").fillna(0)
+    df["mercado"]  = pd.to_numeric(df["mercado"],  errors="coerce").fillna(0)
+    df["unidades"] = pd.to_numeric(df["unidades"], errors="coerce").fillna(0).astype(int)
+    df["rating"]   = pd.to_numeric(df["rating"],   errors="coerce").clip(1,5).fillna(4.0)
+    df["reviews"]  = pd.to_numeric(df["reviews"],  errors="coerce").fillna(0).astype(int)
+    df = df[(df["precio"] > 0) & (df["nombre"].str.strip() != "")]
+    df = df.drop_duplicates(subset=["nombre","marca"], keep="first")
+    df["margen"]  = ((df["mercado"] - df["precio"]) / df["mercado"].replace(0,1) * 100).round(1)
+    df["vol_usd"] = (df["precio"] * df["unidades"]).round(0)
+    df["score"]   = (df["rating"]*10 + df["margen"] + df["unidades"]/10000).round(1)
+    return df.reset_index(drop=True)
+
+# ══════════════════════════════════════════════════════════════════
 # HELPERS
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 
-def plotly_theme():
+def fmt(val):
+    if val >= 1_000_000: return f"${val/1_000_000:.1f}M"
+    if val >= 1_000:     return f"${val/1_000:.0f}K"
+    return f"${val:.2f}"
+
+def rot_badge(r):
+    m = {
+        "muy_alta": ("Muy Alta","alta"),
+        "alta":     ("Alta","alta"),
+        "media_alta":("Media-Alta","media"),
+        "media":    ("Media","media"),
+        "baja":     ("Baja","baja"),
+    }
+    label, cls = m.get(r, ("N/A","media"))
+    return f'<span class="badge-{cls}">{label}</span>'
+
+def tend_icon(t):
+    return {"muy_creciente":"Muy Creciente","creciente":"Creciente",
+            "estable":"Estable","decreciente":"Decreciente"}.get(t, t)
+
+def theme():
     return dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(13,33,55,0.6)",
-        font=dict(family="DM Sans", color=COLORS["text"], size=12),
-        title_font=dict(family="Syne", size=16, color=COLORS["white"]),
-        xaxis=dict(gridcolor=COLORS["primary"] + "25", linecolor=COLORS["mid"]),
-        yaxis=dict(gridcolor=COLORS["primary"] + "25", linecolor=COLORS["mid"]),
+        font=dict(family="DM Sans", color="#DDE8F5", size=12),
+        title_font=dict(family="Syne", size=15, color="#EEF6FF"),
     )
 
+def ax():
+    return dict(gridcolor="#1E5FAD25", linecolor="#1A3A5C",
+                tickfont=dict(color="#A8D8F0"))
 
-def format_currency(val):
-    if val >= 1_000_000:
-        return f"${val/1_000_000:.1f}M"
-    elif val >= 1_000:
-        return f"${val/1_000:.0f}K"
-    return f"${val:.2f}"
+def gen_prices(base, months=12):
+    np.random.seed(int(base*100) % 9999)
+    h, p = [], float(base)
+    for i in range(months):
+        d = datetime.now() - timedelta(days=30*(months-i-1))
+        p = max(p*(1+np.random.normal(0,0.025)), base*0.72)
+        h.append({"mes": d.strftime("%b %Y"), "precio": round(p,2)})
+    return h
 
+def gen_units(base, tend, months=12):
+    tf = {"muy_creciente":0.07,"creciente":0.035,"estable":0.005,"decreciente":-0.025}.get(tend,0.005)
+    np.random.seed(int(base) % 9999)
+    h, u = [], float(base)
+    for i in range(months):
+        d = datetime.now() - timedelta(days=30*(months-i-1))
+        u = u*(1+tf)*(1+0.08*np.sin(i*np.pi/6))*np.random.normal(1,0.04)
+        h.append({"mes": d.strftime("%b %Y"), "unidades": max(int(u),0)})
+    return h
 
-def rotation_badge(rot):
-    mapping = {
-        "muy_alta": ("🔵 Muy Alta", "alta"),
-        "alta": ("🟢 Alta", "alta"),
-        "media_alta": ("🟡 Media-Alta", "media"),
-        "media": ("🟡 Media", "media"),
-        "baja": ("🔴 Baja", "baja"),
-    }
-    label, cls = mapping.get(rot, ("⚪ N/A", "media"))
-    return f'<span class="badge-{cls}">{label}</span>'
+# ══════════════════════════════════════════════════════════════════
+# CARGAR DATOS
+# ══════════════════════════════════════════════════════════════════
 
+with st.spinner("Cargando datos..."):
+    api_rows  = fetch_makeup()
+    df_full   = build_df(api_rows)
+    api_count = len(api_rows)
 
-def trend_icon(t):
-    icons = {
-        "muy_creciente": "🚀 Muy Creciente",
-        "creciente": "📈 Creciente",
-        "estable": "➡️ Estable",
-        "decreciente": "📉 Decreciente"
-    }
-    return icons.get(t, t)
+now   = datetime.now()
+nxt   = datetime(now.year, now.month+1 if now.month < 12 else 1, 1)
+dleft = (nxt - now).days
 
+# ══════════════════════════════════════════════════════════════════
+# HEADER
+# ══════════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────
-# HEADER PRINCIPAL
-# ─────────────────────────────────────────────
+c1, c2, c3 = st.columns([1, 5, 2])
+with c1:
+    st.markdown(f'<div style="text-align:center;padding:10px 0;"><div style="width:64px;height:64px;background:linear-gradient(135deg,#1E5FAD,#2E86DE);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 32px #54A0FF60;font-size:28px;">🔬</div></div>', unsafe_allow_html=True)
+with c2:
+    st.markdown(f'<div style="padding:8px 0;"><h1 style="margin:0;font-size:2.1rem;background:linear-gradient(90deg,#EEF6FF,#54A0FF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">ESTUDIO DE MERCADO ROME</h1><p style="margin:0;color:#A8D8F0;font-size:.9rem;letter-spacing:.05em;">Inteligencia Comercial Global &middot; Belleza &amp; Cuidado Personal &middot; Mercados Internacionales</p></div>', unsafe_allow_html=True)
+with c3:
+    st.markdown(f'<div style="text-align:right;padding:10px 0;"><div style="background:#1A3A5C80;border:1px solid #54A0FF40;border-radius:10px;padding:10px 14px;display:inline-block;"><div style="color:#A8D8F0;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;">Ultima actualizacion</div><div style="color:#EEF6FF;font-weight:700;font-size:1rem;font-family:Syne,sans-serif;">{now.strftime("%B %Y")}</div><div style="color:#54A0FF;font-size:.72rem;">Proxima en {dleft} dias</div></div></div>', unsafe_allow_html=True)
 
-col_logo, col_title, col_update = st.columns([1, 5, 2])
+st.markdown("<hr style='margin:8px 0 20px 0;'>", unsafe_allow_html=True)
 
-with col_logo:
-    st.markdown(f"""
-    <div style="text-align:center; padding: 10px 0;">
-        <div style="width:64px; height:64px; background: linear-gradient(135deg, {COLORS['primary']}, {COLORS['bright']});
-             border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
-             box-shadow: 0 8px 32px {COLORS['accent']}60; font-size: 28px;">
-            🔬
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_title:
-    st.markdown(f"""
-    <div style="padding: 8px 0;">
-        <h1 style="margin:0; font-size: 2.2rem; background: linear-gradient(90deg, {COLORS['white']}, {COLORS['accent']});
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.02em;">
-            ESTUDIO DE MERCADO ROME
-        </h1>
-        <p style="margin:0; color:{COLORS['pale']}; font-size: 0.95rem; letter-spacing: 0.05em;">
-            Inteligencia Comercial Global · Belleza & Cuidado Personal · Mercados Internacionales
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_update:
-    now = datetime.now()
-    next_update = datetime(now.year, now.month + 1 if now.month < 12 else 1, 1)
-    days_left = (next_update - now).days
-    st.markdown(f"""
-    <div style="text-align:right; padding:10px 0;">
-        <div style="background: {COLORS['mid']}80; border: 1px solid {COLORS['accent']}40;
-             border-radius: 10px; padding: 10px 14px; display: inline-block;">
-            <div style="color:{COLORS['pale']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em;">
-                📅 Última actualización
-            </div>
-            <div style="color:{COLORS['white']}; font-weight:700; font-size:1rem; font-family:'Syne',sans-serif;">
-                {now.strftime("%B %Y")}
-            </div>
-            <div style="color:{COLORS['accent']}; font-size:0.75rem;">
-                🔄 Próxima en {days_left} días
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<hr style='margin: 8px 0 20px 0;'>", unsafe_allow_html=True)
-
-
-# ─────────────────────────────────────────────
-# SIDEBAR - FILTROS
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown(f"""
-    <div style="text-align:center; padding: 16px 0 8px;">
-        <div style="font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:800;
-             color:{COLORS['white']}; letter-spacing: 0.05em;">
-            🎛️ FILTROS
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div style="text-align:center;font-family:Syne,sans-serif;font-size:1.2rem;font-weight:800;color:#EEF6FF;padding:16px 0 8px;">FILTROS</div>', unsafe_allow_html=True)
     st.markdown("---")
 
-    # Categoría
-    categorias = get_categories()
-    cat_sel = st.selectbox("📂 Categoría", categorias, index=0)
-
-    # Target
-    target_sel = st.selectbox("👤 Target", ["Todos", "Femenino", "Masculino", "Mixto"], index=0)
-
-    # Rango precio
-    st.markdown(f"<p style='color:{COLORS['pale']}; font-size:0.85rem; margin-bottom:4px;'>💰 Rango de precio (USD)</p>", unsafe_allow_html=True)
-    precio_range = st.slider("", 0, 250, (0, 250), label_visibility="collapsed")
-
-    # Tendencia
-    tend_sel = st.multiselect(
-        "📈 Tendencia",
-        ["muy_creciente", "creciente", "estable", "decreciente"],
-        default=["muy_creciente", "creciente", "estable", "decreciente"]
-    )
-
-    # Rotación
-    rot_sel = st.multiselect(
-        "🔄 Rotación",
-        ["muy_alta", "alta", "media_alta", "media", "baja"],
-        default=["muy_alta", "alta", "media_alta", "media", "baja"]
-    )
-
-    # Rating mínimo
-    rating_min = st.slider("⭐ Rating mínimo", 1.0, 5.0, 4.0, 0.1)
-
+    cats      = ["Todas"] + sorted(df_full["cat"].dropna().unique().tolist())
+    cat_sel   = st.selectbox("Categoria", cats)
+    tgt_sel   = st.selectbox("Target", ["Todos","Femenino","Masculino","Mixto"])
+    precio_r  = st.slider("Precio USD", 0, 250, (0, 250))
+    tend_sel  = st.multiselect("Tendencia",
+        ["muy_creciente","creciente","estable","decreciente"],
+        default=["muy_creciente","creciente","estable","decreciente"])
+    rot_sel   = st.multiselect("Rotacion",
+        ["muy_alta","alta","media_alta","media","baja"],
+        default=["muy_alta","alta","media_alta","media","baja"])
+    rating_min = st.slider("Rating minimo", 1.0, 5.0, 4.0, 0.1)
+    st.markdown("---")
+    sort_by   = st.radio("Ordenar por",
+        ["unidades","vol_usd","score","rating"],
+        format_func=lambda x: {"unidades":"Unidades/mes","vol_usd":"Volumen USD","score":"Score","rating":"Rating"}[x])
     st.markdown("---")
 
-    # Ordenar por
-    sort_by = st.radio(
-        "📊 Ordenar por",
-        ["unidades_mes", "volumen_mensual_usd", "score_oportunidad", "rating"],
-        format_func=lambda x: {
-            "unidades_mes": "🔢 Unidades/mes",
-            "volumen_mensual_usd": "💵 Volumen USD",
-            "score_oportunidad": "🎯 Score Oportunidad",
-            "rating": "⭐ Rating"
-        }[x]
-    )
-
-    st.markdown("---")
-
-    # Info sistema
-    df_all = get_dataframe()
-    render_connection_status()
-
+    clr = "#00B894" if api_count > 0 else "#FDCB6E"
+    ico = "En vivo" if api_count > 0 else "Datos locales"
+    st.markdown(f'<div style="background:{clr}18;border:1px solid {clr}60;border-radius:10px;padding:10px;text-align:center;"><div style="color:{clr};font-weight:700;font-size:.75rem;">{ico}</div><div style="color:#DDE8F5;font-size:.8rem;margin-top:4px;">Local: {len(LOCAL_PRODUCTS)} | API: {api_count}</div><div style="color:#A8D8F0;font-size:.72rem;margin-top:2px;">{len(df_full)} productos totales</div></div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 Forzar recarga de datos", use_container_width=True):
+    if st.button("Recargar datos", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
+# ══════════════════════════════════════════════════════════════════
+# FILTRAR
+# ══════════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────
-# FILTRAR DATOS
-# ─────────────────────────────────────────────
-
-df = get_dataframe()
-
-if cat_sel != "Todas":
-    df = df[df["categoria"] == cat_sel]
-if target_sel != "Todos":
-    df = df[df["target"] == target_sel]
-
+df = df_full.copy()
+if cat_sel  != "Todas": df = df[df["cat"]    == cat_sel]
+if tgt_sel  != "Todos": df = df[df["target"] == tgt_sel]
 df = df[
-    (df["precio_usd"] >= precio_range[0]) &
-    (df["precio_usd"] <= precio_range[1]) &
-    (df["tendencia"].isin(tend_sel)) &
-    (df["rotacion"].isin(rot_sel)) &
-    (df["rating"] >= rating_min)
+    (df["precio"]  >= precio_r[0]) & (df["precio"]  <= precio_r[1]) &
+    (df["tend"].isin(tend_sel)) & (df["rot"].isin(rot_sel)) &
+    (df["rating"]  >= rating_min)
 ]
+df_s = df.sort_values(sort_by, ascending=False)
 
-df_sorted = df.sort_values(sort_by, ascending=False)
+# ══════════════════════════════════════════════════════════════════
+# KPIs
+# ══════════════════════════════════════════════════════════════════
 
-
-# ─────────────────────────────────────────────
-# KPIs PRINCIPALES
-# ─────────────────────────────────────────────
-
-st.markdown(f"<h3 style='color:{COLORS['accent']}; font-family:Syne,sans-serif; font-size:1.1rem; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:12px;'>📊 Indicadores Clave del Mercado</h3>", unsafe_allow_html=True)
-
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-
-total_vol = df["volumen_mensual_usd"].sum()
-total_units = df["unidades_mes"].sum()
-avg_price = df["precio_usd"].mean()
-avg_rating = df["rating"].mean()
-avg_margin = df["margen_oportunidad"].mean()
-top_score = df["score_oportunidad"].max() if len(df) > 0 else 0
-
-with k1:
-    st.metric("📦 Productos", f"{len(df)}", delta=f"de {len(get_dataframe())} total")
-with k2:
-    st.metric("💰 Vol. Mensual", format_currency(total_vol), delta="mercado global")
-with k3:
-    st.metric("🔢 Unidades/mes", f"{total_units:,.0f}", delta="proyección")
-with k4:
-    st.metric("💵 Precio Prom.", f"${avg_price:.0f}", delta=f"USD")
-with k5:
-    st.metric("⭐ Rating Prom.", f"{avg_rating:.1f}/5", delta="calificación")
-with k6:
-    st.metric("📈 Margen Prom.", f"{avg_margin:.1f}%", delta="vs mercado")
-
+st.markdown('<h3 style="color:#54A0FF;font-family:Syne,sans-serif;font-size:1rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Indicadores Clave del Mercado</h3>', unsafe_allow_html=True)
+k1,k2,k3,k4,k5,k6 = st.columns(6)
+with k1: st.metric("Productos",    str(len(df)),                    delta=f"de {len(df_full)}")
+with k2: st.metric("Vol Mensual",  fmt(df["vol_usd"].sum()),         delta="USD global")
+with k3: st.metric("Unidades/mes", f"{df['unidades'].sum():,.0f}",   delta="total")
+with k4: st.metric("Precio Prom.", f"${df['precio'].mean():.0f}",    delta="USD")
+with k5: st.metric("Rating Prom.", f"{df['rating'].mean():.1f}/5",   delta="avg")
+with k6: st.metric("Margen Prom.", f"{df['margen'].mean():.1f}%",    delta="vs mercado")
 st.markdown("<br>", unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────
-# TABS PRINCIPALES
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# TABS
+# ══════════════════════════════════════════════════════════════════
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏆 Top 10 por Categoría",
-    "📈 Análisis de Tendencias",
-    "💰 Precios & Rotación",
-    "🔍 Explorador de Productos",
-    "📊 Análisis Comparativo"
+    "Top 10", "Tendencias", "Precios y Rotacion", "Explorador", "Comparativo"
 ])
 
-
-# ══════════════════════════════════════════════
-# TAB 1: TOP 10
-# ══════════════════════════════════════════════
-
+# ────────── TAB 1: TOP 10 ──────────
 with tab1:
-    st.markdown(f"<h3 style='color:{COLORS['white']}; font-family:Syne,sans-serif; margin-bottom:20px;'>🏆 Top 10 Productos — Ordenado por {sort_by.replace('_', ' ').title()}</h3>", unsafe_allow_html=True)
-
-    top10 = df_sorted.head(10).reset_index(drop=True)
-
+    top10 = df_s.head(10).reset_index(drop=True)
     if len(top10) == 0:
-        st.warning("⚠️ No hay productos con los filtros seleccionados. Ajusta los filtros en el panel lateral.")
+        st.warning("Sin productos con los filtros actuales.")
     else:
-        # Gráfico de barras horizontales
-        fig_top = go.Figure()
-        fig_top.add_trace(go.Bar(
-            y=top10["nombre"].apply(lambda x: x[:45] + "..." if len(x) > 45 else x),
+        fig = go.Figure(go.Bar(
+            y=top10["nombre"].apply(lambda x: x[:45]+"..." if len(x)>45 else x),
             x=top10[sort_by],
             orientation="h",
             marker=dict(
-                color=top10[sort_by],
-                colorscale=[[0, COLORS["mid"]], [0.5, COLORS["primary"]], [1, COLORS["accent"]]],
+                color=top10[sort_by].tolist(),
+                colorscale=[[0,"#1A3A5C"],[0.5,"#1E5FAD"],[1,"#54A0FF"]],
                 showscale=False,
-                line=dict(width=0)
             ),
-            text=top10[sort_by].apply(lambda x: format_currency(x) if sort_by in ["volumen_mensual_usd"] else f"{x:,.0f}"),
+            text=top10[sort_by].apply(lambda x: fmt(x) if sort_by=="vol_usd" else f"{x:,.0f}"),
             textposition="outside",
-            textfont=dict(color=COLORS["white"], size=11),
-            hovertemplate="<b>%{y}</b><br>Valor: %{x:,.0f}<extra></extra>"
+            textfont=dict(color="#EEF6FF", size=11),
         ))
-
-        fig_top.update_layout(
-            **plotly_theme(),
-            height=420,
-            margin=dict(l=10, r=80, t=20, b=10),
-            yaxis=dict(categoryorder="total ascending", tickfont=dict(size=11)),
-            xaxis_title=sort_by.replace("_", " ").title(),
-            showlegend=False
+        fig.update_layout(
+            **theme(), height=400,
+            margin=dict(l=10,r=100,t=20,b=10),
+            showlegend=False,
+            xaxis=dict(**ax(), title=sort_by.replace("_"," ").title()),
+            yaxis=dict(**ax(), categoryorder="total ascending"),
         )
-
-        st.plotly_chart(fig_top, use_container_width=True)
-
-        # Tabla detallada
-        st.markdown(f"<h4 style='color:{COLORS['accent']}; font-family:Syne,sans-serif; margin: 20px 0 10px;'>📋 Detalle del Top 10</h4>", unsafe_allow_html=True)
+        st.plotly_chart(fig, use_container_width=True)
 
         for i, row in top10.iterrows():
-            rank = i + 1
-            color_rank = COLORS["gold"] if rank == 1 else COLORS["accent"] if rank <= 3 else COLORS["pale"]
-            medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"#{rank}"
-
-            with st.expander(f"{medal} {row['nombre']} — {row['marca']} · ${row['precio_usd']} USD", expanded=(rank <= 3)):
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    st.metric("💰 Precio", f"${row['precio_usd']:.2f}")
-                    st.metric("📊 Precio Mercado", f"${row['precio_promedio_mercado']:.2f}")
-                with c2:
-                    st.metric("🔢 Unid/mes", f"{row['unidades_mes']:,}")
-                    st.metric("💵 Vol. Mensual", format_currency(row["volumen_mensual_usd"]))
-                with c3:
-                    st.metric("⭐ Rating", f"{row['rating']}/5.0")
-                    st.metric("💬 Reviews", f"{row['reviews']:,}")
-                with c4:
-                    st.metric("📈 Margen", f"{row['margen_oportunidad']}%")
-                    st.metric("🎯 Score", f"{row['score_oportunidad']:.0f}")
-
+            rank  = i + 1
+            medal = "Gold #1" if rank==1 else "Silver #2" if rank==2 else "Bronze #3" if rank==3 else f"#{rank}"
+            with st.expander(f"{medal} | {row['nombre']} — {row['marca']} | ${row['precio']:.2f}", expanded=(rank<=2)):
+                ca,cb,cc,cd = st.columns(4)
+                with ca:
+                    st.metric("Precio",    f"${row['precio']:.2f}")
+                    st.metric("Mercado",   f"${row['mercado']:.2f}")
+                with cb:
+                    st.metric("Unid/mes",  f"{row['unidades']:,}")
+                    st.metric("Vol USD",   fmt(row['vol_usd']))
+                with cc:
+                    st.metric("Rating",    f"{row['rating']}/5")
+                    st.metric("Reviews",   f"{row['reviews']:,}")
+                with cd:
+                    st.metric("Margen",    f"{row['margen']}%")
+                    st.metric("Score",     f"{row['score']:.0f}")
+                plat_str = ", ".join(row["plat"]) if isinstance(row["plat"], list) else str(row["plat"])
                 st.markdown(f"""
-                <div class="tooltip-card">
-                    <table style="width:100%; border-collapse: collapse;">
-                        <tr>
-                            <td style="padding: 4px 12px; color:{COLORS['pale']}; font-size:0.85rem;">🌍 Origen</td>
-                            <td style="padding: 4px 12px; color:{COLORS['white']}; font-weight:500;">{row['origen']}</td>
-                            <td style="padding: 4px 12px; color:{COLORS['pale']}; font-size:0.85rem;">📂 Categoría</td>
-                            <td style="padding: 4px 12px; color:{COLORS['white']}; font-weight:500;">{row['categoria']} › {row['subcategoria']}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 4px 12px; color:{COLORS['pale']}; font-size:0.85rem;">👤 Target</td>
-                            <td style="padding: 4px 12px; color:{COLORS['white']}; font-weight:500;">{row['target']}</td>
-                            <td style="padding: 4px 12px; color:{COLORS['pale']}; font-size:0.85rem;">🏪 Plataformas</td>
-                            <td style="padding: 4px 12px; color:{COLORS['white']}; font-weight:500;">{', '.join(row['plataformas'])}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 4px 12px; color:{COLORS['pale']}; font-size:0.85rem;">📈 Tendencia</td>
-                            <td style="padding: 4px 12px;">{trend_icon(row['tendencia'])}</td>
-                            <td style="padding: 4px 12px; color:{COLORS['pale']}; font-size:0.85rem;">🔄 Rotación</td>
-                            <td style="padding: 4px 12px;">{rotation_badge(row['rotacion'])}</td>
-                        </tr>
-                    </table>
-                    <div style="margin-top:10px; padding:8px 0; border-top: 1px solid {COLORS['primary']}30;">
-                        <span style="color:{COLORS['pale']}; font-size:0.8rem;">🎯 Problema que ataca: </span>
-                        <span style="color:{COLORS['accent']}; font-size:0.85rem; font-weight:500;">{row['problema_ataca']}</span>
-                    </div>
-                    <div style="margin-top:6px;">
-                        <span style="color:{COLORS['pale']}; font-size:0.8rem;">📝 Descripción: </span>
-                        <span style="color:{COLORS['text']}; font-size:0.85rem;">{row['descripcion']}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                <div class="card">
+                  <table style="width:100%;border-collapse:collapse;">
+                    <tr>
+                      <td style="padding:4px 10px;color:#A8D8F0;font-size:.82rem;">Origen</td>
+                      <td style="padding:4px 10px;color:#EEF6FF;">{row['origen']}</td>
+                      <td style="padding:4px 10px;color:#A8D8F0;font-size:.82rem;">Categoria</td>
+                      <td style="padding:4px 10px;color:#EEF6FF;">{row['cat']} &rsaquo; {row['sub']}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:4px 10px;color:#A8D8F0;font-size:.82rem;">Target</td>
+                      <td style="padding:4px 10px;color:#EEF6FF;">{row['target']}</td>
+                      <td style="padding:4px 10px;color:#A8D8F0;font-size:.82rem;">Plataformas</td>
+                      <td style="padding:4px 10px;color:#EEF6FF;">{plat_str}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:4px 10px;color:#A8D8F0;font-size:.82rem;">Tendencia</td>
+                      <td style="padding:4px 10px;color:#EEF6FF;">{tend_icon(row['tend'])}</td>
+                      <td style="padding:4px 10px;color:#A8D8F0;font-size:.82rem;">Rotacion</td>
+                      <td style="padding:4px 10px;">{rot_badge(row['rot'])}</td>
+                    </tr>
+                  </table>
+                  <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1E5FAD30;font-size:.82rem;">
+                    <span style="color:#A8D8F0;">Problema: </span>
+                    <span style="color:#54A0FF;">{row['problema']}</span>
+                  </div>
+                  <div style="margin-top:4px;font-size:.8rem;color:#DDE8F5;">{row['desc']}</div>
+                  <div style="margin-top:4px;font-size:.72rem;color:#A8D8F090;">Fuente: {row['fuente']}</div>
+                </div>""", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════
-# TAB 2: TENDENCIAS
-# ══════════════════════════════════════════════
-
+# ────────── TAB 2: TENDENCIAS ──────────
 with tab2:
-    st.markdown(f"<h3 style='color:{COLORS['white']}; font-family:Syne,sans-serif; margin-bottom:20px;'>📈 Análisis de Tendencias de Mercado</h3>", unsafe_allow_html=True)
-
-    col_t1, col_t2 = st.columns(2)
-
-    with col_t1:
-        # Distribución por tendencia
-        df_all = get_dataframe()
-        tend_count = df_all["tendencia"].value_counts().reset_index()
-        tend_count.columns = ["tendencia", "count"]
-        tend_labels = {
-            "muy_creciente": "🚀 Muy Creciente",
-            "creciente": "📈 Creciente",
-            "estable": "➡️ Estable",
-            "decreciente": "📉 Decreciente"
-        }
-        tend_count["label"] = tend_count["tendencia"].map(tend_labels)
-
-        fig_tend = go.Figure(go.Pie(
-            labels=tend_count["label"],
-            values=tend_count["count"],
-            hole=0.6,
-            marker=dict(
-                colors=[COLORS["accent"], COLORS["bright"], COLORS["primary"], COLORS["danger"]],
-                line=dict(color=COLORS["navy"], width=2)
-            ),
+    col1, col2 = st.columns(2)
+    with col1:
+        tc = df_full["tend"].value_counts().reset_index()
+        tc.columns = ["tend","n"]
+        lmap = {"muy_creciente":"Muy Creciente","creciente":"Creciente","estable":"Estable","decreciente":"Decreciente"}
+        tc["label"] = tc["tend"].map(lmap)
+        fig = go.Figure(go.Pie(
+            labels=tc["label"], values=tc["n"], hole=0.6,
+            marker=dict(colors=["#54A0FF","#2E86DE","#1E5FAD","#E17055"],
+                        line=dict(color="#0A1628",width=2)),
             textinfo="label+percent",
-            textfont=dict(size=11, color=COLORS["white"])
+            textfont=dict(size=11, color="#EEF6FF"),
         ))
+        fig.update_layout(**theme(), title="Distribucion por Tendencia",
+                          height=300, margin=dict(l=20,r=20,t=50,b=20), showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
 
-        fig_tend.update_layout(
-            **plotly_theme(),
-            title="Distribución por Tendencia",
-            height=320,
-            margin=dict(l=20, r=20, t=50, b=20),
-            showlegend=False
-        )
-        st.plotly_chart(fig_tend, use_container_width=True)
-
-    with col_t2:
-        # Volumen por categoría
-        vol_cat = df_all.groupby("categoria")["volumen_mensual_usd"].sum().sort_values(ascending=True)
-        fig_vol = go.Figure(go.Bar(
-            y=vol_cat.index,
-            x=vol_cat.values,
-            orientation="h",
-            marker=dict(
-                color=vol_cat.values,
-                colorscale=[[0, COLORS["mid"]], [1, COLORS["accent"]]],
-                showscale=False
-            ),
-            text=[format_currency(v) for v in vol_cat.values],
+    with col2:
+        vc = df_full.groupby("cat")["vol_usd"].sum().sort_values()
+        fig = go.Figure(go.Bar(
+            y=vc.index, x=vc.values, orientation="h",
+            marker=dict(color=list(vc.values),
+                        colorscale=[[0,"#1A3A5C"],[1,"#54A0FF"]], showscale=False),
+            text=[fmt(v) for v in vc.values],
             textposition="outside",
-            textfont=dict(color=COLORS["white"], size=10)
+            textfont=dict(color="#EEF6FF",size=10),
         ))
-        fig_vol.update_layout(
-            **plotly_theme(),
-            title="Volumen Mensual por Categoría (USD)",
-            height=320,
-            margin=dict(l=10, r=80, t=50, b=10),
-            showlegend=False
-        )
-        st.plotly_chart(fig_vol, use_container_width=True)
+        fig.update_layout(**theme(), title="Volumen Mensual por Categoria (USD)",
+                          height=300, margin=dict(l=10,r=90,t=50,b=10), showlegend=False,
+                          xaxis=ax(), yaxis=ax())
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Simulación: precio vs rotación
-    st.markdown(f"<h4 style='color:{COLORS['accent']}; font-family:Syne,sans-serif; margin: 20px 0 10px;'>🔄 Impacto del Precio en la Rotación (Simulación Mensual)</h4>", unsafe_allow_html=True)
+    # Simulador
+    st.markdown('<h4 style="color:#54A0FF;font-family:Syne,sans-serif;margin:20px 0 10px;">Simulador Precio-Rotacion (12 meses)</h4>', unsafe_allow_html=True)
+    sel = st.selectbox("Producto:", df_full["nombre"].tolist(), key="sim")
+    row = df_full[df_full["nombre"]==sel].iloc[0]
+    ph  = gen_prices(row["precio"])
+    rh  = gen_units(row["unidades"], row["tend"])
+    ml  = [x["mes"]      for x in ph]
+    pl  = [x["precio"]   for x in ph]
+    ul  = [x["unidades"] for x in rh]
 
-    product_names = df_all["nombre"].tolist()
-    sel_product = st.selectbox("Selecciona un producto para simular:", product_names, key="sim_product")
-    product_data = df_all[df_all["nombre"] == sel_product].iloc[0]
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(go.Scatter(x=ml, y=pl, name="Precio USD",
+        line=dict(color="#FFC300",width=3), mode="lines+markers",
+        marker=dict(size=7)), secondary_y=False)
+    fig.add_trace(go.Bar(x=ml, y=ul, name="Unidades",
+        marker=dict(color="#54A0FF",opacity=0.7)), secondary_y=True)
+    fig.update_layout(**theme(), title=f"Precio vs Rotacion — {sel[:45]}",
+                      height=350, margin=dict(l=20,r=20,t=50,b=40),
+                      legend=dict(orientation="h",y=1.05,bgcolor="rgba(0,0,0,0)"),
+                      hovermode="x unified", xaxis=ax())
+    fig.update_yaxes(title_text="Precio USD",    secondary_y=False, **ax())
+    fig.update_yaxes(title_text="Unidades/mes",  secondary_y=True,  **ax())
+    st.plotly_chart(fig, use_container_width=True)
 
-    months_labels = [(datetime.now() - timedelta(days=30 * (11 - i))).strftime("%b %Y") for i in range(12)]
-    price_hist = generate_price_history(product_data["precio_usd"], 12)
-    rot_hist = generate_rotation_history(product_data["unidades_mes"], product_data["tendencia"], 12)
-
-    prices = [p["precio"] for p in price_hist]
-    units = [r["unidades"] for r in rot_hist]
-
-    fig_sim = make_subplots(specs=[[{"secondary_y": True}]])
-
-    fig_sim.add_trace(go.Scatter(
-        x=months_labels, y=prices,
-        name="💰 Precio USD",
-        line=dict(color=COLORS["gold"], width=3),
-        mode="lines+markers",
-        marker=dict(size=7)
-    ), secondary_y=False)
-
-    fig_sim.add_trace(go.Bar(
-        x=months_labels, y=units,
-        name="📦 Unidades vendidas",
-        marker=dict(color=COLORS["accent"], opacity=0.7),
-    ), secondary_y=True)
-
-    fig_sim.update_layout(
-        **plotly_theme(),
-        title=f"Evolución Precio–Rotación: {sel_product[:50]}",
-        height=380,
-        margin=dict(l=20, r=20, t=50, b=40),
-        legend=dict(orientation="h", y=1.05, bgcolor="rgba(0,0,0,0)"),
-        hovermode="x unified"
-    )
-    fig_sim.update_yaxes(title_text="Precio (USD)", secondary_y=False, gridcolor=COLORS["primary"] + "20")
-    fig_sim.update_yaxes(title_text="Unidades/mes", secondary_y=True, gridcolor=COLORS["primary"] + "20")
-
-    st.plotly_chart(fig_sim, use_container_width=True)
-
-    # Insight automático
-    price_change = (prices[-1] - prices[0]) / prices[0] * 100
-    unit_change = (units[-1] - units[0]) / units[0] * 100
-    correlation = np.corrcoef(prices, units)[0, 1]
-
-    icon_p = "📈" if price_change > 0 else "📉"
-    icon_u = "📈" if unit_change > 0 else "📉"
-
+    pchg = (pl[-1]-pl[0])/pl[0]*100
+    uchg = (ul[-1]-ul[0])/ul[0]*100 if ul[0]>0 else 0
+    corr = float(np.corrcoef(pl, ul)[0,1])
+    if   pchg < -3 and uchg < 5: insight = "Alerta: Precio baja sin que la rotacion suba — revisar competitividad."
+    elif uchg > 0:                insight = "Saludable: Rotacion creciente independiente del precio."
+    else:                         insight = "Comportamiento normal de mercado."
     st.markdown(f"""
-    <div class="tooltip-card">
-        <div style="font-family:'Syne',sans-serif; font-weight:700; color:{COLORS['white']}; margin-bottom:10px;">
-            🤖 Insight Automático — {sel_product[:40]}
-        </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;">
-            <div>
-                <span style="color:{COLORS['pale']}; font-size:0.8rem;">Variación precio (12 meses)</span><br>
-                <span style="color:{COLORS['gold']}; font-size:1.2rem; font-weight:700;">{icon_p} {price_change:+.1f}%</span>
-            </div>
-            <div>
-                <span style="color:{COLORS['pale']}; font-size:0.8rem;">Variación rotación (12 meses)</span><br>
-                <span style="color:{COLORS['accent']}; font-size:1.2rem; font-weight:700;">{icon_u} {unit_change:+.1f}%</span>
-            </div>
-            <div>
-                <span style="color:{COLORS['pale']}; font-size:0.8rem;">Correlación Precio-Rotación</span><br>
-                <span style="color:{COLORS['success'] if abs(correlation) < 0.3 else COLORS['warning']}; font-size:1.2rem; font-weight:700;">
-                    {correlation:.2f} {'(baja)' if abs(correlation) < 0.3 else '(moderada)' if abs(correlation) < 0.6 else '(alta)'}
-                </span>
-            </div>
-        </div>
-        <div style="margin-top:12px; padding-top:10px; border-top:1px solid {COLORS['primary']}30; color:{COLORS['text']}; font-size:0.85rem;">
-            {'⚠️ <strong>Alerta:</strong> El precio bajó mientras la rotación no subió proporcionalmente — posible baja competitividad.' if price_change < -3 and unit_change < 5 else
-             '✅ <strong>Saludable:</strong> La rotación se mantiene estable o creciente independiente de variaciones de precio.' if unit_change > 0 else
-             '🔄 El producto mantiene un comportamiento normal del mercado.'}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    <div class="card">
+      <div style="font-family:Syne,sans-serif;font-weight:700;color:#EEF6FF;margin-bottom:10px;">Insight Automatico</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div><span style="color:#A8D8F0;font-size:.78rem;">Variacion precio 12m</span><br>
+          <span style="color:#FFC300;font-size:1.2rem;font-weight:700;">{"+" if pchg>0 else ""}{pchg:.1f}%</span></div>
+        <div><span style="color:#A8D8F0;font-size:.78rem;">Variacion rotacion 12m</span><br>
+          <span style="color:#54A0FF;font-size:1.2rem;font-weight:700;">{"+" if uchg>0 else ""}{uchg:.1f}%</span></div>
+        <div><span style="color:#A8D8F0;font-size:.78rem;">Correlacion P-R</span><br>
+          <span style="color:#00B894;font-size:1.2rem;font-weight:700;">{corr:.2f}</span></div>
+      </div>
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #1E5FAD30;color:#DDE8F5;font-size:.84rem;">{insight}</div>
+    </div>""", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════
-# TAB 3: PRECIOS & ROTACIÓN
-# ══════════════════════════════════════════════
-
+# ────────── TAB 3: PRECIOS & ROTACIÓN ──────────
 with tab3:
-    st.markdown(f"<h3 style='color:{COLORS['white']}; font-family:Syne,sans-serif; margin-bottom:20px;'>💰 Análisis de Precios y Comportamiento de Rotación</h3>", unsafe_allow_html=True)
-
-    col_p1, col_p2 = st.columns(2)
-
-    with col_p1:
-        # Scatter: Precio vs Rating
-        fig_scatter = px.scatter(
-            df_all,
-            x="precio_usd",
-            y="rating",
-            size="unidades_mes",
-            color="categoria",
-            hover_name="nombre",
-            hover_data=["marca", "rotacion", "tendencia"],
+    col1, col2 = st.columns(2)
+    with col1:
+        fig = px.scatter(df_full, x="precio", y="rating", size="unidades",
+            color="cat", hover_name="nombre",
             color_discrete_sequence=px.colors.sequential.Blues_r,
-            labels={"precio_usd": "Precio USD", "rating": "Rating"}
-        )
-        fig_scatter.update_layout(
-            **plotly_theme(),
-            title="Precio vs Rating (tamaño = volumen)",
-            height=360,
-            margin=dict(l=20, r=20, t=50, b=30),
-            legend=dict(orientation="h", y=-0.2, font=dict(size=9), bgcolor="rgba(0,0,0,0)")
-        )
-        st.plotly_chart(fig_scatter, use_container_width=True)
+            labels={"precio":"Precio USD","rating":"Rating","cat":"Categoria"})
+        fig.update_layout(**theme(), title="Precio vs Rating (tamano = volumen)",
+                          height=360, margin=dict(l=20,r=20,t=50,b=30),
+                          xaxis=ax(), yaxis=ax(),
+                          legend=dict(orientation="h",y=-0.28,font=dict(size=9),bgcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(fig, use_container_width=True)
 
-    with col_p2:
-        # Box plot rotación por precio
-        df_price_cat = df_all.copy()
-        df_price_cat["rango_precio"] = pd.cut(
-            df_price_cat["precio_usd"],
-            bins=[0, 20, 50, 100, 250],
-            labels=["$0-20", "$20-50", "$50-100", "$100+"]
-        )
-        rot_order = {"muy_alta": 4, "alta": 3, "media_alta": 2, "media": 1, "baja": 0}
-        df_price_cat["rot_score"] = df_price_cat["rotacion"].map(rot_order)
+    with col2:
+        dfc = df_full.copy()
+        dfc["rango"] = pd.cut(dfc["precio"], bins=[0,20,50,100,250],
+                               labels=["$0-20","$20-50","$50-100","$100+"])
+        fig = px.box(dfc.dropna(subset=["rango"]), x="rango", y="unidades",
+            color="rango",
+            color_discrete_sequence=["#1A3A5C","#1E5FAD","#2E86DE","#54A0FF"],
+            labels={"rango":"Rango precio","unidades":"Unidades/mes"})
+        fig.update_layout(**theme(), title="Volumen por Rango de Precio",
+                          height=360, showlegend=False, margin=dict(l=20,r=20,t=50,b=30),
+                          xaxis=ax(), yaxis=ax())
+        st.plotly_chart(fig, use_container_width=True)
 
-        fig_box = px.box(
-            df_price_cat.dropna(subset=["rango_precio"]),
-            x="rango_precio",
-            y="unidades_mes",
-            color="rango_precio",
-            color_discrete_sequence=[COLORS["mid"], COLORS["primary"], COLORS["bright"], COLORS["accent"]],
-            labels={"rango_precio": "Rango de precio", "unidades_mes": "Unidades/mes"}
-        )
-        fig_box.update_layout(
-            **plotly_theme(),
-            title="Volumen por Rango de Precio",
-            height=360,
-            showlegend=False,
-            margin=dict(l=20, r=20, t=50, b=30)
-        )
-        st.plotly_chart(fig_box, use_container_width=True)
-
-    # Heatmap: Rotación por categoría
-    st.markdown(f"<h4 style='color:{COLORS['accent']}; font-family:Syne,sans-serif; margin:20px 0 10px;'>🔥 Mapa de Calor — Rotación por Categoría y Tendencia</h4>", unsafe_allow_html=True)
-
-    pivot_data = df_all.groupby(["categoria", "tendencia"])["unidades_mes"].sum().reset_index()
-    pivot = pivot_data.pivot(index="categoria", columns="tendencia", values="unidades_mes").fillna(0)
-
-    fig_heat = go.Figure(go.Heatmap(
-        z=pivot.values,
-        x=pivot.columns.tolist(),
-        y=pivot.index.tolist(),
-        colorscale=[[0, COLORS["navy"]], [0.3, COLORS["mid"]], [0.6, COLORS["primary"]], [1, COLORS["accent"]]],
-        text=[[format_currency(v) for v in row] for row in pivot.values],
+    # Heatmap
+    st.markdown('<h4 style="color:#54A0FF;font-family:Syne,sans-serif;margin:20px 0 10px;">Heatmap Rotacion — Categoria x Tendencia</h4>', unsafe_allow_html=True)
+    piv = df_full.groupby(["cat","tend"])["unidades"].sum().reset_index()
+    piv = piv.pivot(index="cat", columns="tend", values="unidades").fillna(0)
+    fig = go.Figure(go.Heatmap(
+        z=piv.values, x=piv.columns.tolist(), y=piv.index.tolist(),
+        colorscale=[[0,"#0A1628"],[0.3,"#1A3A5C"],[0.6,"#1E5FAD"],[1,"#54A0FF"]],
+        text=[[fmt(v) for v in r] for r in piv.values],
         texttemplate="%{text}",
-        textfont=dict(size=10, color=COLORS["white"]),
-        hovertemplate="Categoría: %{y}<br>Tendencia: %{x}<br>Unidades: %{z:,}<extra></extra>",
-        showscale=True,
-        colorbar=dict(tickfont=dict(color=COLORS["pale"]))
+        textfont=dict(size=10, color="#EEF6FF"),
+        colorbar=dict(tickfont=dict(color="#A8D8F0")),
     ))
+    fig.update_layout(**theme(), title="Unidades/mes — Categoria x Tendencia",
+                      height=380, margin=dict(l=20,r=80,t=50,b=30),
+                      xaxis=dict(**ax(), title=""),
+                      yaxis=dict(**ax(), title=""))
+    st.plotly_chart(fig, use_container_width=True)
 
-    fig_heat.update_layout(
-        **plotly_theme(),
-        title="Unidades/mes — Categoría × Tendencia",
-        height=380,
-        margin=dict(l=20, r=80, t=50, b=30),
-        xaxis=dict(tickfont=dict(size=10)),
-        yaxis=dict(tickfont=dict(size=10))
-    )
-    st.plotly_chart(fig_heat, use_container_width=True)
-
-
-# ══════════════════════════════════════════════
-# TAB 4: EXPLORADOR
-# ══════════════════════════════════════════════
-
+# ────────── TAB 4: EXPLORADOR ──────────
 with tab4:
-    st.markdown(f"<h3 style='color:{COLORS['white']}; font-family:Syne,sans-serif; margin-bottom:20px;'>🔍 Explorador Detallado de Productos</h3>", unsafe_allow_html=True)
-
-    search = st.text_input("🔎 Buscar producto, marca o problema...", placeholder="Ej: acné, Sephora, retinol, caída cabello...")
-
-    df_explore = get_dataframe()
+    search = st.text_input("Buscar por nombre, marca o problema...",
+                           placeholder="Ej: acne, retinol, Sephora, caida cabello...")
+    dfe = df_full.copy()
     if search:
-        mask = (
-            df_explore["nombre"].str.lower().str.contains(search.lower(), na=False) |
-            df_explore["marca"].str.lower().str.contains(search.lower(), na=False) |
-            df_explore["problema_ataca"].str.lower().str.contains(search.lower(), na=False) |
-            df_explore["descripcion"].str.lower().str.contains(search.lower(), na=False) |
-            df_explore["categoria"].str.lower().str.contains(search.lower(), na=False)
-        )
-        df_explore = df_explore[mask]
-
-    st.markdown(f"<p style='color:{COLORS['pale']}; font-size:0.85rem;'>Mostrando {len(df_explore)} productos</p>", unsafe_allow_html=True)
-
-    if len(df_explore) == 0:
-        st.warning("No se encontraron productos. Intenta otra búsqueda.")
+        q = search.lower()
+        mask = (dfe["nombre"].str.lower().str.contains(q,na=False) |
+                dfe["marca"].str.lower().str.contains(q,na=False)  |
+                dfe["problema"].str.lower().str.contains(q,na=False)|
+                dfe["cat"].str.lower().str.contains(q,na=False)    |
+                dfe["desc"].str.lower().str.contains(q,na=False))
+        dfe = dfe[mask]
+    st.markdown(f'<p style="color:#A8D8F0;font-size:.84rem;">Mostrando {len(dfe)} productos</p>', unsafe_allow_html=True)
+    if len(dfe) == 0:
+        st.warning("Sin resultados.")
     else:
-        # Tabla compacta
-        display_cols = {
-            "id": "ID",
-            "nombre": "Producto",
-            "marca": "Marca",
-            "categoria": "Categoría",
-            "precio_usd": "Precio USD",
-            "precio_promedio_mercado": "Precio Mercado",
-            "margen_oportunidad": "Margen %",
-            "unidades_mes": "Unid/mes",
-            "rating": "Rating",
-            "tendencia": "Tendencia",
-            "rotacion": "Rotación",
-            "target": "Target"
-        }
-        df_display = df_explore[list(display_cols.keys())].rename(columns=display_cols)
-        df_display["Tendencia"] = df_display["Tendencia"].map({
-            "muy_creciente": "🚀 Muy Creciente",
-            "creciente": "📈 Creciente",
-            "estable": "➡️ Estable",
-            "decreciente": "📉 Decreciente"
-        })
-        df_display["Rotación"] = df_display["Rotación"].map({
-            "muy_alta": "🔵 Muy Alta",
-            "alta": "🟢 Alta",
-            "media_alta": "🟡 Media-Alta",
-            "media": "🟡 Media",
-            "baja": "🔴 Baja"
-        })
-        df_display["Precio USD"] = df_display["Precio USD"].apply(lambda x: f"${x:.2f}")
-        df_display["Precio Mercado"] = df_display["Precio Mercado"].apply(lambda x: f"${x:.2f}")
-        df_display["Margen %"] = df_display["Margen %"].apply(lambda x: f"{x:.1f}%")
-        df_display["Unid/mes"] = df_display["Unid/mes"].apply(lambda x: f"{x:,}")
-        df_display["Rating"] = df_display["Rating"].apply(lambda x: f"⭐ {x:.1f}")
+        disp = dfe[["id","nombre","marca","cat","precio","mercado","margen","unidades","rating","tend","rot","target","fuente"]].copy()
+        disp.columns = ["ID","Producto","Marca","Categoria","Precio","Mercado","Margen%","Unid/mes","Rating","Tendencia","Rotacion","Target","Fuente"]
+        disp["Tendencia"] = disp["Tendencia"].map({"muy_creciente":"Muy Creciente","creciente":"Creciente","estable":"Estable","decreciente":"Decreciente"})
+        disp["Rotacion"]  = disp["Rotacion"].map({"muy_alta":"Muy Alta","alta":"Alta","media_alta":"Media-Alta","media":"Media","baja":"Baja"})
+        disp["Precio"]    = disp["Precio"].apply(lambda x: f"${x:.2f}")
+        disp["Mercado"]   = disp["Mercado"].apply(lambda x: f"${x:.2f}")
+        disp["Margen%"]   = disp["Margen%"].apply(lambda x: f"{x:.1f}%")
+        disp["Unid/mes"]  = disp["Unid/mes"].apply(lambda x: f"{x:,}")
+        disp["Rating"]    = disp["Rating"].apply(lambda x: f"{x:.1f}")
+        st.dataframe(disp, use_container_width=True, hide_index=True, height=460)
+        csv = dfe.drop(columns=["plat","img","url"], errors="ignore").to_csv(index=False).encode("utf-8")
+        st.download_button("Descargar CSV", csv,
+            f"rome_market_{now.strftime('%Y%m')}.csv", "text/csv")
 
-        st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True,
-            height=450
-        )
-
-        # Exportar CSV
-        csv = df_explore.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 Descargar datos completos (CSV)",
-            data=csv,
-            file_name=f"rome_market_data_{datetime.now().strftime('%Y%m')}.csv",
-            mime="text/csv"
-        )
-
-
-# ══════════════════════════════════════════════
-# TAB 5: ANÁLISIS COMPARATIVO
-# ══════════════════════════════════════════════
-
+# ────────── TAB 5: COMPARATIVO ──────────
 with tab5:
-    st.markdown(f"<h3 style='color:{COLORS['white']}; font-family:Syne,sans-serif; margin-bottom:20px;'>📊 Análisis Comparativo y Oportunidades</h3>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        fig = px.treemap(df_full, path=["cat","sub"], values="vol_usd",
+            color="score",
+            color_continuous_scale=[[0,"#1A3A5C"],[0.5,"#1E5FAD"],[1,"#54A0FF"]])
+        fig.update_layout(**theme(), title="Mapa de Oportunidades por Volumen USD",
+                          height=400, margin=dict(l=10,r=10,t=50,b=10),
+                          coloraxis_colorbar=dict(title="Score",tickfont=dict(color="#A8D8F0")))
+        fig.update_traces(textfont=dict(size=11,color="white"),
+                          marker=dict(line=dict(width=2,color="#0A1628")))
+        st.plotly_chart(fig, use_container_width=True)
 
-    col_c1, col_c2 = st.columns(2)
+    with col2:
+        dfo   = df_full.nlargest(10,"margen")
+        names = dfo["nombre"].apply(lambda x: x[:26]+"..." if len(x)>26 else x)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(name="Precio propio",  x=names, y=dfo["precio"],  marker_color="#1E5FAD"))
+        fig.add_trace(go.Bar(name="Precio mercado", x=names, y=dfo["mercado"], marker_color="#54A0FF"))
+        fig.update_layout(**theme(), title="Top 10 Mayor Margen vs Mercado",
+                          barmode="group", height=400,
+                          margin=dict(l=10,r=10,t=50,b=90),
+                          legend=dict(orientation="h",y=1.05,bgcolor="rgba(0,0,0,0)"),
+                          xaxis=dict(**ax(), tickangle=-35, tickfont=dict(size=9)),
+                          yaxis=ax())
+        st.plotly_chart(fig, use_container_width=True)
 
-    with col_c1:
-        # Treemap categorías
-        df_tree = get_dataframe()
-        fig_tree = px.treemap(
-            df_tree,
-            path=["categoria", "subcategoria"],
-            values="volumen_mensual_usd",
-            color="score_oportunidad",
-            color_continuous_scale=[[0, COLORS["mid"]], [0.5, COLORS["primary"]], [1, COLORS["accent"]]],
-            hover_data=["nombre", "precio_usd"]
-        )
-        fig_tree.update_layout(
-            **plotly_theme(),
-            title="Mapa de Oportunidades por Volumen (USD)",
-            height=400,
-            margin=dict(l=10, r=10, t=50, b=10),
-            coloraxis_colorbar=dict(title="Score", tickfont=dict(color=COLORS["pale"]))
-        )
-        fig_tree.update_traces(
-            textfont=dict(size=11, color="white"),
-            marker=dict(line=dict(width=2, color=COLORS["navy"]))
-        )
-        st.plotly_chart(fig_tree, use_container_width=True)
+    # Radar
+    st.markdown('<h4 style="color:#54A0FF;font-family:Syne,sans-serif;margin:20px 0 10px;">Radar de Competitividad por Categoria</h4>', unsafe_allow_html=True)
+    rc = df_full.groupby("cat").agg(
+        rating=("rating","mean"),
+        margen=("margen","mean"),
+        unidades=("unidades", lambda x: x.mean()/1000),
+        score=("score","mean"),
+        precio=("precio", lambda x: max(0.0, 10-(x.mean()/30)))
+    ).reset_index()
 
-    with col_c2:
-        # Top oportunidades: mayor diferencia precio vs mercado
-        df_opp = get_dataframe().nlargest(10, "margen_oportunidad")
-        fig_opp = go.Figure()
+    cats6   = rc["cat"].head(6).tolist()
+    mlabels = ["Rating","Margen","Vol(K)","Score","Precio Comp."]
+    mcols   = ["rating","margen","unidades","score","precio"]
+    max_v   = [5,15,120,120,10]
+    colors6 = ["#54A0FF","#FFC300","#00B894","#FDCB6E","#A8D8F0","#2E86DE"]
 
-        fig_opp.add_trace(go.Bar(
-            name="Precio propio",
-            x=df_opp["nombre"].apply(lambda x: x[:30] + "..." if len(x) > 30 else x),
-            y=df_opp["precio_usd"],
-            marker_color=COLORS["primary"],
+    fig = go.Figure()
+    for i, cat in enumerate(cats6):
+        row  = rc[rc["cat"]==cat].iloc[0]
+        vals = [min(float(row[m])/(mx or 1)*10, 10) for m,mx in zip(mcols,max_v)]
+        vals.append(vals[0])
+        fig.add_trace(go.Scatterpolar(
+            r=vals, theta=mlabels+[mlabels[0]],
+            fill="toself", name=cat,
+            fillcolor=colors6[i%len(colors6)]+"20",
+            line=dict(color=colors6[i%len(colors6)], width=2),
         ))
-        fig_opp.add_trace(go.Bar(
-            name="Precio mercado",
-            x=df_opp["nombre"].apply(lambda x: x[:30] + "..." if len(x) > 30 else x),
-            y=df_opp["precio_promedio_mercado"],
-            marker_color=COLORS["accent"],
-        ))
-
-        fig_opp.update_layout(
-            **plotly_theme(),
-            title="Top 10 — Oportunidad de Margen",
-            barmode="group",
-            height=400,
-            margin=dict(l=10, r=10, t=50, b=80),
-            legend=dict(orientation="h", y=1.05, bgcolor="rgba(0,0,0,0)"),
-            xaxis=dict(tickangle=-35, tickfont=dict(size=9))
-        )
-        st.plotly_chart(fig_opp, use_container_width=True)
-
-    # Radar por categoría
-    st.markdown(f"<h4 style='color:{COLORS['accent']}; font-family:Syne,sans-serif; margin:20px 0 10px;'>🕸️ Radar de Competitividad por Categoría</h4>", unsafe_allow_html=True)
-
-    df_radar = get_dataframe()
-    radar_cats = df_radar.groupby("categoria").agg({
-        "rating": "mean",
-        "margen_oportunidad": "mean",
-        "unidades_mes": lambda x: x.mean() / 1000,
-        "score_oportunidad": "mean",
-        "precio_usd": lambda x: 10 - (x.mean() / 30)  # Competitividad inversa de precio
-    }).reset_index()
-
-    cats_to_show = radar_cats["categoria"].head(6).tolist()
-    metrics = ["rating", "margen_oportunidad", "unidades_mes", "score_oportunidad", "precio_usd"]
-    metric_labels = ["Rating", "Margen %", "Vol. (x1000)", "Score", "Competitividad Precio"]
-
-    fig_radar = go.Figure()
-    colors_radar = [COLORS["accent"], COLORS["gold"], COLORS["success"], COLORS["warning"], COLORS["pale"], COLORS["bright"]]
-
-    for i, cat in enumerate(cats_to_show):
-        row = radar_cats[radar_cats["categoria"] == cat].iloc[0]
-        values = [row[m] for m in metrics]
-        # Normalizar 0-10
-        max_vals = [5, 10, 100, 100, 10]
-        values_norm = [min(v / m * 10, 10) for v, m in zip(values, max_vals)]
-        values_norm.append(values_norm[0])
-
-        fig_radar.add_trace(go.Scatterpolar(
-            r=values_norm,
-            theta=metric_labels + [metric_labels[0]],
-            fill="toself",
-            fillcolor=colors_radar[i % len(colors_radar)] + "20",
-            line=dict(color=colors_radar[i % len(colors_radar)], width=2),
-            name=cat
-        ))
-
-    fig_radar.update_layout(
-        **plotly_theme(),
+    fig.update_layout(
+        **theme(),
         polar=dict(
-            bgcolor=COLORS["dark"] + "80",
-            radialaxis=dict(
-                visible=True,
-                range=[0, 10],
-                tickfont=dict(color=COLORS["pale"], size=9),
-                gridcolor=COLORS["primary"] + "30"
-            ),
-            angularaxis=dict(
-                tickfont=dict(color=COLORS["text"], size=11),
-                gridcolor=COLORS["primary"] + "30"
-            )
+            bgcolor="#0D213780",
+            radialaxis=dict(visible=True, range=[0,10],
+                            tickfont=dict(color="#A8D8F0",size=9),
+                            gridcolor="#1E5FAD30"),
+            angularaxis=dict(tickfont=dict(color="#DDE8F5",size=11),
+                             gridcolor="#1E5FAD30"),
         ),
-        title="Radar de Competitividad — Top 6 Categorías",
+        title="Radar — Top 6 Categorias",
         height=450,
-        showlegend=True,
-        legend=dict(orientation="h", y=-0.1, font=dict(size=10), bgcolor="rgba(0,0,0,0)")
+        legend=dict(orientation="h",y=-0.1,font=dict(size=10),bgcolor="rgba(0,0,0,0)"),
     )
-    st.plotly_chart(fig_radar, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 # FOOTER
-# ─────────────────────────────────────────────
-
+# ══════════════════════════════════════════════════════════════════
 st.markdown("<br><hr>", unsafe_allow_html=True)
-st.markdown(f"""
-<div style="text-align:center; padding: 16px 0; color:{COLORS['pale']}; font-size:0.8rem;">
-    <span style="font-family:'Syne',sans-serif; font-size:1rem; color:{COLORS['accent']}; font-weight:700;">
-        ESTUDIO DE MERCADO ROME
-    </span>
-    &nbsp;·&nbsp; Datos actualizados: <strong style="color:{COLORS['white']};">{datetime.now().strftime("%B %Y")}</strong>
-    &nbsp;·&nbsp; {len(get_dataframe())} productos indexados
-    &nbsp;·&nbsp; Mercados: USA · UK · Francia · Japón · Korea · Global
-    <br><br>
-    <span style="font-size:0.72rem; opacity:0.6;">
-        ⚠️ Los precios y unidades son estimaciones de mercado con fines de análisis competitivo. Actualización mensual automática.
-    </span>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(f'<div style="text-align:center;padding:16px 0;color:#A8D8F0;font-size:.78rem;"><span style="font-family:Syne,sans-serif;font-size:1rem;color:#54A0FF;font-weight:700;">ESTUDIO DE MERCADO ROME</span> &nbsp;·&nbsp; {now.strftime("%B %Y")} &nbsp;·&nbsp; {len(df_full)} productos &nbsp;·&nbsp; Fuentes: Base Local · Makeup API<br><br><span style="opacity:.5;font-size:.7rem;">Estimaciones con fines de analisis competitivo. Actualizacion mensual.</span></div>', unsafe_allow_html=True)
