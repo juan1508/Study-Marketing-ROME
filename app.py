@@ -480,9 +480,9 @@ with t5:
         row=rc[rc["cat"]==cat].iloc[0]
         vals=[min(float(row[m])/(mx or 1)*10,10) for m,mx in zip(mcol,mmax)]; vals.append(vals[0])
         fig.add_trace(go.Scatterpolar(r=vals,theta=mlab+[mlab[0]],fill="toself",name=cat,
-            fillcolor=cols6[i%len(cols6)]+"20",line_color=cols6[i%len(cols6)],line_width=2))
+            opacity=0.7,line_color=cols6[i%len(cols6)],line_width=2))
     fig.update_layout(**TH(title_text="Radar — Top 6 Categorias",height=450,
-        polar_bgcolor=DARK+"80",
+        polar_bgcolor="rgba(13,33,55,0.5)",
         legend=dict(orientation="h",y=-0.1,font_size=10,bgcolor="rgba(0,0,0,0)")))
     st.plotly_chart(fig,use_container_width=True)
 
