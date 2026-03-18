@@ -15,30 +15,27 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Asegura que el directorio raíz del proyecto esté en el path
+# Garantiza que el root del proyecto esté en sys.path (necesario en Streamlit Cloud)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-try:
-    from data.products_db import (
-        get_dataframe, get_top10_by_category, get_categories,
-        generate_price_history, generate_rotation_history, PRODUCTS
-    )
-except ModuleNotFoundError:
-    # Fallback: import directo del archivo
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "products_db", os.path.join(ROOT, "data", "products_db.py")
-    )
-    products_db = importlib.util.load_from_spec(spec)
-    spec.loader.exec_module(products_db)
-    get_dataframe = products_db.get_dataframe
-    get_top10_by_category = products_db.get_top10_by_category
-    get_categories = products_db.get_categories
-    generate_price_history = products_db.generate_price_history
-    generate_rotation_history = products_db.generate_rotation_history
-    PRODUCTS = products_db.PRODUCTS
+import importlib.util
+
+def _load_module(name, filepath):
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+_db = _load_module("products_db", os.path.join(ROOT, "data", "products_db.py"))
+
+get_dataframe          = _db.get_dataframe
+get_top10_by_category  = _db.get_top10_by_category
+get_categories         = _db.get_categories
+generate_price_history = _db.generate_price_history
+generate_rotation_history = _db.generate_rotation_history
+PRODUCTS               = _db.PRODUCTS
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE PÁGINA
