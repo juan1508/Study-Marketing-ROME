@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Garantiza que el root del proyecto esté en sys.path (necesario en Streamlit Cloud)
+# ── Carga robusta del módulo de base de datos en la nube ──────────
 ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -24,18 +24,18 @@ import importlib.util
 
 def _load_module(name, filepath):
     spec = importlib.util.spec_from_file_location(name, filepath)
-    mod = importlib.util.module_from_spec(spec)
+    mod  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
-_db = _load_module("products_db", os.path.join(ROOT, "data", "products_db.py"))
+_db = _load_module("live_fetcher", os.path.join(ROOT, "data", "live_fetcher.py"))
 
-get_dataframe          = _db.get_dataframe
-get_top10_by_category  = _db.get_top10_by_category
-get_categories         = _db.get_categories
-generate_price_history = _db.generate_price_history
+get_dataframe             = _db.get_dataframe
+get_top10_by_category     = _db.get_top10_by_category
+get_categories            = _db.get_categories
+generate_price_history    = _db.generate_price_history
 generate_rotation_history = _db.generate_rotation_history
-PRODUCTS               = _db.PRODUCTS
+render_connection_status  = _db.render_connection_status
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE PÁGINA
@@ -415,20 +415,12 @@ with st.sidebar:
 
     # Info sistema
     df_all = get_dataframe()
-    st.markdown(f"""
-    <div style="text-align:center;">
-        <div style="color:{COLORS['pale']}; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
-            Base de datos
-        </div>
-        <div style="color:{COLORS['accent']}; font-size:1.8rem; font-family:'Syne',sans-serif; font-weight:800;">
-            {len(df_all)}
-        </div>
-        <div style="color:{COLORS['pale']}; font-size:0.8rem;">productos indexados</div>
-        <div style="color:{COLORS['pale']}; font-size:0.75rem; margin-top:4px;">
-            {len(df_all['categoria'].unique())} categorías · 6 plataformas
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    render_connection_status()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔄 Forzar recarga de datos", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 
 # ─────────────────────────────────────────────
