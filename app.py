@@ -312,9 +312,18 @@ def theme():
         title_font=dict(family="Syne", size=15, color="#EEF6FF"),
     )
 
-def ax():
-    return dict(gridcolor="#1E5FAD25", linecolor="#1A3A5C",
-                tickfont=dict(color="#A8D8F0"))
+def ax(title="", tickangle=0, extra=None):
+    """Returns safe axis style dict for Plotly update_layout."""
+    d = {
+        "gridcolor": "#1E5FAD25",
+        "linecolor": "#1A3A5C",
+        "tickcolor": "#A8D8F0",
+        "tickfont":  {"color": "#A8D8F0", "size": 11},
+    }
+    if title:     d["title"] = {"text": title, "font": {"color": "#A8D8F0"}}
+    if tickangle: d["tickangle"] = tickangle
+    if extra:     d.update(extra)
+    return d
 
 def gen_prices(base, months=12):
     np.random.seed(int(base*100) % 9999)
@@ -454,8 +463,8 @@ with tab1:
             **theme(), height=400,
             margin=dict(l=10,r=100,t=20,b=10),
             showlegend=False,
-            xaxis=dict(**ax(), title=sort_by.replace("_"," ").title()),
-            yaxis=dict(**ax(), categoryorder="total ascending"),
+            xaxis=ax(title=sort_by.replace("_"," ").title()),
+            yaxis=ax(extra={"categoryorder":"total ascending"}),
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -561,8 +570,8 @@ with tab2:
                       height=350, margin=dict(l=20,r=20,t=50,b=40),
                       legend=dict(orientation="h",y=1.05,bgcolor="rgba(0,0,0,0)"),
                       hovermode="x unified", xaxis=ax())
-    fig.update_yaxes(title_text="Precio USD",    secondary_y=False, **ax())
-    fig.update_yaxes(title_text="Unidades/mes",  secondary_y=True,  **ax())
+    fig.update_yaxes(title_text="Precio USD",    secondary_y=False, gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont={"color":"#A8D8F0"})
+    fig.update_yaxes(title_text="Unidades/mes",  secondary_y=True,  gridcolor="#1E5FAD25", linecolor="#1A3A5C", tickfont={"color":"#A8D8F0"})
     st.plotly_chart(fig, use_container_width=True)
 
     pchg = (pl[-1]-pl[0])/pl[0]*100
@@ -626,8 +635,7 @@ with tab3:
     ))
     fig.update_layout(**theme(), title="Unidades/mes — Categoria x Tendencia",
                       height=380, margin=dict(l=20,r=80,t=50,b=30),
-                      xaxis=dict(**ax(), title=""),
-                      yaxis=dict(**ax(), title=""))
+                      xaxis=ax(), yaxis=ax())
     st.plotly_chart(fig, use_container_width=True)
 
 # ────────── TAB 4: EXPLORADOR ──────────
@@ -685,7 +693,7 @@ with tab5:
                           barmode="group", height=400,
                           margin=dict(l=10,r=10,t=50,b=90),
                           legend=dict(orientation="h",y=1.05,bgcolor="rgba(0,0,0,0)"),
-                          xaxis=dict(**ax(), tickangle=-35, tickfont=dict(size=9)),
+                          xaxis=ax(tickangle=-35, extra={"tickfont":{"color":"#A8D8F0","size":9}}),
                           yaxis=ax())
         st.plotly_chart(fig, use_container_width=True)
 
